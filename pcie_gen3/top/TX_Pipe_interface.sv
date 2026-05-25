@@ -1,0 +1,20 @@
+interface pipe_tx_interface(input bit CLK);
+  logic PCLK;
+  logic TxDataValid;
+  logic[31:0] TxData;
+  logic TxDataK;
+  logic TxDetectRx;
+  logic TxElecIdle;
+  logic RxData;
+  logic RxDataK;
+  logic RxValid;
+  logic RxElecIdle;
+  logic PhyStatus;
+  logic [2:0] RxStatus;
+  logic [2:0] PowerDown;
+  logic [2:0] PCLK_Rate;
+  logic [1:0] Rate;
+  logic RxWidth;
+  logic TxWidth;
+  logic DataBusWidth;
+endinterface
