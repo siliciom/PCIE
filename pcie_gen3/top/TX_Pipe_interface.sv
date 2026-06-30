@@ -1,11 +1,12 @@
-interface pipe_tx_interface(input bit CLK);
-  logic PCLK;
+interface pipe_tx_interface(input bit PCLK, input bit RESET);
+  logic        dl_mac_packet;
+  logic        tl_mac_packet;
   logic TxDataValid;
-  logic[31:0] TxData;
+  logic[129:0] TxData;
   logic TxDataK;
   logic TxDetectRx;
   logic TxElecIdle;
-  logic RxData;
+  logic [129:0] RxData;
   logic RxDataK;
   logic RxValid;
   logic RxElecIdle;
