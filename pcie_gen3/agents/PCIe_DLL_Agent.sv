@@ -22,7 +22,11 @@ class PCIe_DLL_Agent extends uvm_agent;
   function void connect_phase(uvm_phase phase);
     super.connect_phase(phase);
     PCIe_DLL_Drv.seq_item_port.connect(PCIe_DLL_Seqr.seq_item_export);
-    PCIe_DLL_Mon.TX_MD_ap.connect(PCIe_DLL_Drv.TX_MD_Recv);
+
+    PCIe_DLL_Mon.rc_TX_MD_ap.connect(PCIe_DLL_Drv.rc_TX_MD_Recv);
+    PCIe_DLL_Mon.rc_RX_MD_ap.connect(PCIe_DLL_Drv.rc_RX_MD_Recv);
+    PCIe_DLL_Mon.ep_TX_MD_ap.connect(PCIe_DLL_Drv.ep_TX_MD_Recv);
+    PCIe_DLL_Mon.ep_RX_MD_ap.connect(PCIe_DLL_Drv.ep_RX_MD_Recv);
   endfunction : connect_phase
     
 endclass : PCIe_DLL_Agent

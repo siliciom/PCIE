@@ -7,70 +7,249 @@ class Sequence_tx extends uvm_sequence #(Sequence_item);
   endfunction
   
   task body();
-    req = Sequence_item::type_id::create("req");
+     repeat(4) begin
+     
+    `uvm_do_with(req, {e_type == MEM_WR; e_fmt == FMT_3DW_DATA; addr == 32'h10; td == 1; length == 4;})
+
+    $display("E_TYPE = %s E_FMT = %s fmt = %3b", req.e_type.name(), req.e_fmt.name(), req.fmt);
+    `uvm_do_with(req, {e_type == MEM_RD; e_fmt == FMT_3DW_NO_DATA; addr == 32'h10; td == 1; length == 4;})
+    $display("E_TYPE = %s E_FMT = %s fmt = %3b", req.e_type.name(), req.e_fmt.name(), req.fmt);
+
     
-    start_item(req);
+// `uvm_do_with(req, {e_type == IO_WR; addr == 32'h10; td == 1;})
+// `uvm_do_with(req, {e_type == IO_RD; addr == 32'h10; td == 1;})
     
-    // Byte 0 //
-    
-    req.fmt           = 3'b001;
-    req.r_type        = 5'b00000;
-    req.R1            = 1'b0;
-    req.tc            = 3'b000;
-    req.R2            = 1'b0;
-    req.attr_1        = 1'b0;
-    req.R3            = 1'b0;
-    req.th            = 1'b0;
-    req.td            = 1'b0;
-    req.ep            = 1'b0;
-    req.attr_2        = 2'b00;    
-    req.at            = 2'b10;
-    req.length        = 10'd1;
-    
-    // Byte 1 //
-    
-    req.req_id        = 15'd256;
-    req.tag           = 8'd0;
-    req.first_BE      = 4'b1111;
-    req.last_BE       = 4'b0000;
-    
-    // Byte 2 //
-    
-    req.addr[63:32]   = 32'd0;
-    
-    // Byte 3 //
-    req.addr[31:0]    = 32'd12;
-    
-    //req.payload       = 32768'd15;
-    
-    req.R4[1:0]       = 2'b00;
-    
-    finish_item(req);
-    
-    req.print();
-    
-    
+     end
+        
   endtask
   
 endclass : Sequence_tx
+      
+      
+      
+      
+class Single_Mem_Wr_Rd_3DW extends uvm_sequence #(Sequence_item);
+  
+  `uvm_object_utils(Single_Mem_Wr_Rd_3DW)
+  
+  function new(string name = "Single_Mem_Wr_Rd_3DW");
+    super.new(name);
+  endfunction
+  
+  task body();
+    
+    `uvm_do_with(req, {e_type == MEM_WR; e_fmt == FMT_3DW_DATA; addr == 32'h10; td == 1; length == 4;})
+    
+    `uvm_do_with(req, {e_type == MEM_RD; e_fmt == FMT_3DW_NO_DATA; addr == 32'h10; td == 1; length == 4;})
+    
+   
+  endtask : body
+  
+endclass : Single_Mem_Wr_Rd_3DW
+
+
+
+class Single_Mem_Wr_Rd_4DW extends uvm_sequence #(Sequence_item);
+  
+  `uvm_object_utils(Single_Mem_Wr_Rd_4DW)
+  
+  function new(string name = "Single_Mem_Wr_Rd_4DW");
+    super.new(name);
+  endfunction
+  
+  task body();
+    
+    `uvm_do_with(req, {e_type == MEM_WR; e_fmt == FMT_4DW_DATA;    addr == 64'h120; td == 1; length == 3;})
+    `uvm_do_with(req, {e_type == MEM_RD; e_fmt == FMT_4DW_NO_DATA; addr == 64'h120; td == 1; length == 3;})
+  
+  endtask : body
+  
+endclass : Single_Mem_Wr_Rd_4DW
+
+
+
+
+class Multiple_Mem_Wr_Rd_3DW extends uvm_sequence #(Sequence_item);
+  
+  `uvm_object_utils(Multiple_Mem_Wr_Rd_3DW)
+  
+  int address;
+  bit [31:0] addr_q[$];
+  
+  function new(string name = "Multiple_Mem_Wr_Rd_3DW");
+    super.new(name);
+  endfunction
+  
+  task body();
+    repeat(4) begin
+     
+    `uvm_do_with(req, {e_type == MEM_WR; e_fmt == FMT_3DW_DATA; addr == 32'h10; td == 1; length == 4;})
+
+    `uvm_do_with(req, {e_type == MEM_RD; e_fmt == FMT_3DW_NO_DATA; addr == 32'h10; td == 1; length == 4;})
+
+     end
+        
+  
+  endtask : body
+  
+endclass : Multiple_Mem_Wr_Rd_3DW
+
+
+
+
+class Multiple_Mem_Wr_Rd_4DW extends uvm_sequence #(Sequence_item);
+  
+  `uvm_object_utils(Multiple_Mem_Wr_Rd_4DW)
+  
+  longint unsigned address;
+  bit [63:0] addr_q[$];
+  
+  function new(string name = "Multiple_Mem_Wr_Rd_4DW");
+    super.new(name);
+  endfunction
+  
+  task body();
+    
+    repeat(4) begin
+    `uvm_do_with(req, {e_type == MEM_WR; e_fmt == FMT_4DW_DATA;    addr == 64'h120; td == 1; length == 3;})
+    `uvm_do_with(req, {e_type == MEM_RD; e_fmt == FMT_4DW_NO_DATA; addr == 64'h120; td == 1; length == 3;})
+
+    end
+  endtask : body
+  
+endclass : Multiple_Mem_Wr_Rd_4DW
+
+
+
+
+class B2B_Mem_Wr_Rd_3DW extends uvm_sequence #(Sequence_item);
+  
+  `uvm_object_utils(B2B_Mem_Wr_Rd_3DW)
+  
+  function new(string name = "B2B_Mem_Wr_Rd_3DW");
+    super.new(name);
+  endfunction
+  
+  task body();
+    
+    `uvm_do_with(req, {e_type == MEM_WR; e_fmt == FMT_3DW_DATA; addr == 32'h10; td == 1; length == 4;})
+    `uvm_do_with(req, {e_type == MEM_WR; e_fmt == FMT_3DW_DATA; addr == 32'h20; td == 1; length == 4;})
+    
+    `uvm_do_with(req, {e_type == MEM_RD; e_fmt == FMT_3DW_NO_DATA; addr == 32'h10; td == 1; length == 4;})
+    `uvm_do_with(req, {e_type == MEM_RD; e_fmt == FMT_3DW_NO_DATA; addr == 32'h20; td == 1; length == 4;})
+  
+  endtask : body
+  
+endclass : B2B_Mem_Wr_Rd_3DW
+
+
+
+
+class B2B_Mem_Wr_Rd_4DW extends uvm_sequence #(Sequence_item);
+  
+  `uvm_object_utils(B2B_Mem_Wr_Rd_4DW)
+  
+  function new(string name = "B2B_Mem_Wr_Rd_4DW");
+    super.new(name);
+  endfunction
+  
+  task body();
+    
+    `uvm_do_with(req, {e_type == MEM_WR; e_fmt == FMT_4DW_DATA; addr == 32'h10; td == 1; length == 3;})
+    `uvm_do_with(req, {e_type == MEM_WR; e_fmt == FMT_4DW_DATA; addr == 32'h20; td == 1; length == 3;})
+    
+    `uvm_do_with(req, {e_type == MEM_RD; e_fmt == FMT_4DW_NO_DATA; addr == 32'h10; td == 1; length == 3;})
+    `uvm_do_with(req, {e_type == MEM_RD; e_fmt == FMT_4DW_NO_DATA; addr == 32'h20; td == 1; length == 3;})
+  
+  endtask : body
+  
+endclass : B2B_Mem_Wr_Rd_4DW
+
+
+
+
+class Single_IO_Wr_Rd_3DW extends uvm_sequence #(Sequence_item);
+  
+  `uvm_object_utils(Single_IO_Wr_Rd_3DW)
+  
+  function new(string name = "Single_IO_Wr_Rd_3DW");
+    super.new(name);
+  endfunction
+  
+  task body();
+    
+    `uvm_do_with(req, {e_type == IO_WR; e_fmt == FMT_3DW_DATA; addr == 32'h10; td == 1;})
+    `uvm_do_with(req, {e_type == IO_RD; e_fmt == FMT_3DW_NO_DATA; addr == 32'h10; td == 1;})
+  
+  endtask : body
+  
+endclass : Single_IO_Wr_Rd_3DW
 
 
 
 
 
+class Multiple_IO_Wr_Rd_3DW extends uvm_sequence #(Sequence_item);
+  
+  `uvm_object_utils(Multiple_IO_Wr_Rd_3DW)
+  
+  int address;
+  bit [31:0] addr_q[$];
+  
+  function new(string name = "Multiple_IO_Wr_Rd_3DW");
+    super.new(name);
+  endfunction
+  
+  task body();
+    
+    repeat(4) begin
+      `uvm_do_with(req, {e_type == IO_WR; e_fmt == FMT_3DW_DATA; addr == 32'h10; td == 1;})
+    `uvm_do_with(req, {e_type == IO_RD; e_fmt == FMT_3DW_NO_DATA; addr == 32'h10; td == 1;})
+
+    end  
+  endtask : body
+  
+endclass : Multiple_IO_Wr_Rd_3DW
 
 
 
 
 
+class B2B_IO_Wr_Rd_3DW extends uvm_sequence #(Sequence_item);
+  
+  `uvm_object_utils(B2B_IO_Wr_Rd_3DW)
+  
+  function new(string name = "B2B_IO_Wr_Rd_3DW");
+    super.new(name);
+  endfunction
+  
+  task body();
+    
+    `uvm_do_with(req, {e_type == IO_WR; e_fmt == FMT_3DW_DATA; addr == 32'h10; td == 1;})
+    `uvm_do_with(req, {e_type == IO_WR; e_fmt == FMT_3DW_DATA; addr == 32'h20; td == 1;})
+    
+    `uvm_do_with(req, {e_type == IO_RD; e_fmt == FMT_3DW_NO_DATA; addr == 32'h10; td == 1;})
+    `uvm_do_with(req, {e_type == IO_RD; e_fmt == FMT_3DW_NO_DATA; addr == 32'h20; td == 1;})
+  
+  endtask : body
+  
+endclass : B2B_IO_Wr_Rd_3DW
 
 
 
 
 
-
-
-
+ 
+  
+   
+  
+  
+  
+  
+  
+      
+      
+      
 
 
 class Sequence_rx extends uvm_sequence #(Sequence_item);

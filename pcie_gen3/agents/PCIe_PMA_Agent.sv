@@ -1,22 +1,22 @@
-class PCIe_PMA_Agent extends uvm_agent;
+class PCIe_PMA_agent extends uvm_agent;
   
-  PCIe_PMA_Driver pma_tx_drv;
-  PCIe_PMA_Sequencer pma_tx_seqr;
-  PCIe_PMA_Monitor pma_tx_mon;
+  PCIe_PMA_driver PCIe_PMA_drv;
+  PCIe_PMA_sequencer PCIe_PMA_seqr;
+  PCIe_PMA_monitor PCIe_PMA_mon;
   
-  `uvm_component_utils(PCIe_PMA_Agent)
+  `uvm_component_utils(PCIe_PMA_agent)
   
-  function new (string name = "PCIe_PMA_Agent", uvm_component parent = null);
+  function new (string name = "PCIe_PMA_agent", uvm_component parent = null);
       super.new(name, parent);
   endfunction 
   
   function void build_phase(uvm_phase phase);
       super.build_phase(phase);
     if (get_is_active() == UVM_ACTIVE) begin
-      pma_tx_drv = PCIe_PMA_Driver::type_id::create("pma_tx_drv",this);
-      pma_tx_seqr = PCIe_PMA_Sequencer::type_id::create("pma_tx_seqr",this);
+      PCIe_PMA_drv = PCIe_PMA_driver::type_id::create("PCIe_PMA_drv",this);
+      PCIe_PMA_seqr = PCIe_PMA_sequencer::type_id::create("PCIe_PMA_seqr",this);
        end
-    pma_tx_mon =PCIe_PMA_Monitor::type_id::create("pma_tx_mon",this);
+    PCIe_PMA_mon =PCIe_PMA_monitor::type_id::create("PCIe_PMA_mon",this);
   endfunction
 
  
@@ -25,9 +25,12 @@ class PCIe_PMA_Agent extends uvm_agent;
   function  void connect_phase(uvm_phase phase);
 	super.connect_phase(phase);
     if (get_is_active() == UVM_ACTIVE) begin
-      pma_tx_drv.seq_item_port.connect(pma_tx_seqr.seq_item_export);
+      PCIe_PMA_drv.seq_item_port.connect(PCIe_PMA_seqr.seq_item_export);
        end
-    pma_tx_mon.pma_tx_port.connect(pma_tx_drv.pma_tx_recv);
+    PCIe_PMA_mon.pma_tx_mac_port.connect(PCIe_PMA_drv.pma_tx_recv_mac);
+    PCIe_PMA_mon.pma_tx_rx_port.connect(PCIe_PMA_drv.pma_tx_recv_rx);
+    PCIe_PMA_mon.pma_rx_mac_port.connect(PCIe_PMA_drv.pma_rx_recv_mac);
+    PCIe_PMA_mon.pma_rx_tx_port.connect(PCIe_PMA_drv.pma_rx_recv_tx);
   endfunction
   
 endclass

@@ -5,6 +5,7 @@ import uvm_pkg::*;
 `include "../env/env_config.sv"
 `include "../sequences/Sequence_item.sv"
 `include "../sequences/Sequence.sv"
+`include "../agents/RX_PCIe_LUT.sv"
 `include "../agents/PCIe_TL_Sequencer.sv"
 `include "../agents/PCIe_DLL_Sequencer.sv"
 `include "../agents/PCIe_MAC_Sequencer.sv"

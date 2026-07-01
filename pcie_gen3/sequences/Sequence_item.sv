@@ -1,21 +1,27 @@
 class Sequence_item extends uvm_sequence_item;
+  bit [31:0] tlp_q[$];
+//   bit [31:0] tl_rx_q[$:159] = {32'h44108801, 32'h80001, 32'h200d94, 32'h275257e7, 32'hb9c24057};
+  
   
   // Generic TLP Fields //
   
-  rand bit[2:0]     fmt;
-  rand bit[4:0]     r_type;
-       bit          R1;
-  rand bit[2:0]     tc;
-       bit          R2;
-  rand bit          attr_1;
-       bit          R3;
-  rand bit          th;
-  rand bit          td;
-  rand bit          ep;
-  rand bit[1:0]     attr_2;
-  rand bit[1:0]     at;
-  rand bit[9:0]     length;
-  rand bit[31:0] payload[];
+  rand tlp_type_e e_type;
+  rand fmt_e      e_fmt;
+  rand packet_type_e pkt_type;
+  rand bit[4:0]   r_type;
+  rand bit[2:0]   fmt;
+       bit        R1;
+  rand bit[2:0]   tc;
+       bit        R2;
+  rand bit        attr_1;
+       bit        R3;
+  rand bit        th;
+  rand bit        td;
+  rand bit        ep;
+  rand bit[1:0]   attr_2;
+  rand bit[1:0]   at;
+  rand bit[9:0]   length;
+  rand bit[31:0]  payload[];
   
   //  Memory TLP Fields //
   
@@ -27,10 +33,82 @@ class Sequence_item extends uvm_sequence_item;
   rand bit[3:0]  first_BE;
   rand bit[63:0] addr;
        bit[1:0]  R4;
-       bit[15:0] req_id;
-  bit[31:0] data;
-  bit valid;
-  
+       bit[15:0] req_id; 
+       bit[15:0] completer_id; 
+  rand bit[2:0]  compl_status;
+  rand bit       bcm;
+  rand bit[9:0]  byte_count;
+  rand bit[3:0]  ext_register_num;
+  rand bit[7:0]  register_num;
+  rand bit[6:0]  lower_addr;
+       bit[3:0]  R5;
+       bit       R6;
+       bit[31:0] ECRC;
+  	   bit       ecrc_error;
+
+  //-----------------------------------------------------------
+  // PMA layer fields
+  //   Used by pma_tx_driver / pma_tx_monitor for both RC_MODE
+  //   and EP_MODE roles (serial 130-bit word capture/replay and
+  //   their associated expected-size handshake counters).
+  //-----------------------------------------------------------
+
+  // pma rx side signals (EP_MODE)
+  bit [129:0] pma_rx_data [$];
+  bit [129:0] pma_tx_data_t [$];
+  static int size_tx_rx;
+
+  // pma tx side signals (RC_MODE)
+  bit [129:0] pma_tx_data[$];
+  bit [129:0] tx_data_q[$];
+  static int size_rx_tx;
+
+  //-----------------------------------------------------------
+  // DLL layer fields
+  //   Used by TX_DLL_Driver/TX_DLL_Monitor for both RC_MODE and
+  //   EP_MODE roles - raw TL packet queues handed off between TL
+  //   and DLL layers, and DLLP queues used during link/flow-
+  //   control initialization (DL_INIT_FC1/DL_INIT_FC2).
+  //-----------------------------------------------------------
+  bit [31:0] rx_data[$];
+  bit [31:0] tx_data[$];
+  bit [31:0] rx_data_t[$];
+  bit [31:0] tx_data_t[$];
+  bit [31:0] dllp_packet_q [$];
+  bit [31:0] dllp_packet_rx_q[$];
+
+  // Flow-control credits exchanged via INITFC1/INITFC2 DLLPs
+  bit [7:0]  fc_ph;
+  bit [7:0]  fc_nph;
+  bit [7:0]  fc_cmplh;
+  bit [11:0] fc_pd;
+  bit [11:0] fc_npd;
+  bit [11:0] fc_cmpld;
+
+  //-----------------------------------------------------------
+  // MAC layer fields
+  //   Used by mac_tx_driver for both RC_MODE and EP_MODE roles -
+  //   DLLP/TLP queues and PMA-reassembled ordered-set/data queues
+  //   handed off between the PMA and DLL layers via analysis
+  //   ports.
+  //-----------------------------------------------------------
+  bit [31:0]  dllp_packet [$];
+  bit [31:0]  dllp_tx_packet [$];
+
+  bit [31:0]  mac_rx_data[$][$];
+  bit [31:0]  dlp_queue[$];
+  bit [31:0]  dlp_rx_queue[$];
+  bit [31:0]  mac_tx_data[$][$];
+
+  bit [31:0]  tlp_queue_t[$];
+  bit [31:0]  tlp_queue[$];
+  bit [127:0] os_t[$];
+
+  // Expected-count handshake fields used by mac_tx_monitor to
+  // decide when a full TLP/DLLP burst has been captured.
+  static int count_tlp = 0;
+  static int count_tx_tlp = 0;
+
   `uvm_object_utils_begin(Sequence_item)
   `uvm_field_int(fmt,        UVM_ALL_ON | UVM_DEC)
   `uvm_field_int(r_type,     UVM_ALL_ON | UVM_DEC)
@@ -57,80 +135,597 @@ class Sequence_item extends uvm_sequence_item;
     super.new(name);
   endfunction
     
+   virtual function void do_print(uvm_printer printer);
+
+  super.do_print(printer);
+
+   // COMMON HEADER FIELDS (DW0)
+ 
+  printer.print_field("fmt",        fmt,        3,  UVM_BIN);
+  printer.print_field("r_type",     r_type,     5,  UVM_BIN);
+  printer.print_field("R1",         R1,         1,  UVM_BIN);
+  printer.print_field("tc",         tc,         3,  UVM_BIN);
+  printer.print_field("R2",         R2,         1,  UVM_BIN);
+  printer.print_field("attr_1",     attr_1,     1,  UVM_BIN);
+  printer.print_field("R3",         R3,         1,  UVM_BIN);
+  printer.print_field("th",         th,         1,  UVM_BIN);
+  printer.print_field("td",         td,         1,  UVM_BIN);
+  printer.print_field("ep",         ep,         1,  UVM_BIN);
+  printer.print_field("attr_2",     attr_2,     2,  UVM_BIN);
+  printer.print_field("at",         at,         2,  UVM_BIN);
+  printer.print_field("length",     length,    10,  UVM_DEC);
+
+   // TYPE SPECIFIC FIELDS
+ 
+  case(e_type)
+
+  // MEMORY REQUESTS
+ 
+    MEM_RD, MEM_WR : begin
+      printer.print_field("req_id",     req_id,     16, UVM_HEX);
+      printer.print_field("tag",        tag,         8, UVM_HEX);
+      printer.print_field("last_BE",    last_BE,     4, UVM_BIN);
+      printer.print_field("first_BE",   first_BE,    4, UVM_BIN);
+      printer.print_field("addr",       addr,        64, UVM_HEX);
+
+      if(e_type == MEM_WR) begin
+
+        foreach(payload[i]) begin
+
+          printer.print_field($sformatf("payload[%0d]", i), payload[i], 32, UVM_HEX);
+
+        end
+
+      end
+
+    end
+
+     // IO REQUESTS
+ 
+    IO_RD, IO_WR : begin
+
+      printer.print_field("req_id",     req_id,     16, UVM_HEX);
+      printer.print_field("tag",        tag,         8, UVM_HEX);
+      printer.print_field("last_BE",    last_BE,     4, UVM_BIN);
+      printer.print_field("first_BE",   first_BE,    4, UVM_BIN);
+      printer.print_field("addr",       addr,        32, UVM_HEX);
+
+      if(e_type == IO_WR) begin
+
+        foreach(payload[i]) begin
+
+          printer.print_field($sformatf("payload[%0d]", i), payload[i], 32, UVM_HEX);
+
+        end
+
+      end
+
+    end
+
+     // CONFIGURATION REQUESTS
+ 
+    CFG_RD0, CFG_WR0, CFG_RD1, CFG_WR1 : begin
+
+      printer.print_field("req_id",           req_id,           16, UVM_HEX);
+      printer.print_field("tag",              tag,               8, UVM_HEX);
+      printer.print_field("last_BE",          last_BE,           4, UVM_BIN);
+      printer.print_field("first_BE",         first_BE,          4, UVM_BIN);
+      printer.print_field("bus",              bus,               8, UVM_HEX);
+      printer.print_field("device",           device,            5, UVM_HEX);
+      printer.print_field("function_n",       function_n,        3, UVM_HEX);
+      printer.print_field("R5",               R5,                4, UVM_BIN);
+      printer.print_field("ext_register_num", ext_register_num,  4, UVM_HEX);
+      printer.print_field("register_num",     register_num,      8, UVM_HEX);
+      printer.print_field("R4",               R4,                2,  UVM_BIN);
+
+      if(e_type inside {CFG_WR0, CFG_WR1}) begin
+
+        foreach(payload[i]) begin
+
+          printer.print_field($sformatf("payload[%0d]", i), payload[i], 32, UVM_HEX);
+
+        end
+
+      end
+
+    end
+
+     // COMPLETIONS
+ 
+    CPL, CPL_DATA : begin
+
+      printer.print_field("completer_id", completer_id, 16, UVM_HEX);
+      printer.print_field("compl_status", compl_status,  3, UVM_BIN);
+      printer.print_field("bcm",          bcm,           1, UVM_BIN);
+      printer.print_field("byte_count",   byte_count,   10, UVM_DEC);
+      printer.print_field("req_id",       req_id,       16, UVM_HEX);
+      printer.print_field("tag",          tag,           8, UVM_HEX);
+      printer.print_field("R6",           R6,            1, UVM_BIN);
+      printer.print_field("lower_addr",   lower_addr,    7, UVM_HEX);
+
+      if(e_type == CPL_DATA) begin
+
+        foreach(payload[i]) begin
+
+          printer.print_field($sformatf("payload[%0d]", i),payload[i], 32, UVM_HEX);
+
+        end
+
+      end
+
+    end
+
+     // MESSAGE REQUESTS
+ 
+    MSG_RTRC, MSG_RBA, MSG_RBI, MSG_IBD, MSG_ILTAR, MSG_GARTRC, MSG_RESERVED1, MSG_RESERVED2 : begin
+
+      printer.print_field("req_id",     req_id,     16, UVM_HEX);
+      printer.print_field("tag",        tag,         8, UVM_HEX);
+      printer.print_field("last_BE",    last_BE,     4, UVM_BIN);
+      printer.print_field("first_BE",   first_BE,    4, UVM_BIN);
+      printer.print_field("addr",       addr,        64, UVM_HEX);
+
+    end
+
+  endcase
+
+endfunction
+
+     
   function void post_randomize();
     req_id     = {bus, device, function_n};
-    addr[63:0] = {addr[63:32], addr[31:2], R4[1:0]};  
   endfunction
-  
-  
-  constraint mem_fmt_constraint {
-    if (r_type inside {5'b00000, 5'b00001}) {
-      fmt inside {3'b000, 3'b001, 3'b010, 3'b011};
-    }
-  }
-  
-  constraint io_fmt_constraint {
-    if (r_type == 5'b00010) {
-      fmt inside {3'b000, 3'b010};
-    }
-  }
       
-  constraint configuration_fmt_constraint {
-    if (r_type inside {5'b00100, 5'b00101}) {
-      fmt inside {3'b000, 3'b010};
-    }
-  }
+  constraint MEM_RD_CONSTRAINT {
+    
+    if(e_type == MEM_RD) {
       
-  constraint message_fmt_constraint {
-    if (r_type inside {[5'b10000 : 5'b10111]}) {
-      fmt inside {3'b001, 3'b011};
-    }
-  }
+      r_type == 5'b00000;
       
-  constraint completion_fmt_constraint {
-    if (r_type inside {5'b01010, 5'b01011}) {
-      fmt inside {3'b000, 3'b010};
-    }
-  }
-      
-  constraint payload_size_constraint {
-    payload.size() == length;
-  }
-      
-  constraint byte_enable_constraint {
-    if (length == 1) {
-      last_BE == 4'b0000;
-    }
-      
-      if (length > 1) {
-        first_BE != 4'b0000;
+      if(e_fmt == FMT_3DW_NO_DATA) {
+        
+        fmt == 3'b000;
+        addr[63:32] == 0;
+        addr[31:2] inside {[32'h4 : 32'h100]};
+        
       }
         
-        if (length >= 3) {
+        if(e_fmt == FMT_4DW_NO_DATA) {
+          
+          fmt == 3'b001;
+          addr[63:2] inside {[64'h4 : 64'h200]};
+          
+        }
+          
+          length inside {[1:1024]};
+          payload.size() == 0;
           first_BE inside {4'b0001,4'b0011,4'b0111,4'b1111,4'b1000,4'b1100,4'b1110};
           last_BE  inside {4'b0001,4'b0011,4'b0111,4'b1111,4'b1000,4'b1100,4'b1110};
-        }
-        }
-          
-   constraint traffic_class_constraint {
-     tc inside {3'b000};
-   }
-          
-   constraint address_type_constraint {
-     at inside {2'b10}; // Translated Address //
-   }
-          
-   constraint attributes_constraint {
-     attr_1 inside {1'b0};
-   }
-          
-   constraint attributes_constraint_1 {
-     attr_2 inside {2'b00};
-   }
-          
+    }
+  }
+      
+  constraint MEM_WR_CONSTRAINT {
     
+    if(e_type == MEM_WR) {
+      
+      r_type == 5'b00000;
+      
+      if(e_fmt == FMT_3DW_DATA) {
+        
+        fmt         == 3'b010;
+        addr[63:32] == 0;
+        addr[31:2] inside {[32'h4 : 32'h100]};
+        
+      }
+        
+        if(e_fmt == FMT_4DW_DATA) {
           
+          fmt   == 3'b011;
+          addr[63:2] inside {[64'h4 : 64'h200]};
           
+        }
+          
+          payload.size() inside {[0:1023]};
+      
+          length == payload.size();
+
+          first_BE inside {4'b0001,4'b0011,4'b0111,4'b1111,4'b1000,4'b1100,4'b1110};
+          last_BE  inside {4'b0001,4'b0011,4'b0111,4'b1111,4'b1000,4'b1100,4'b1110};
+    }
+  }
+      
+  constraint IO_RD_CONSTRAINT {
+    
+    if(e_type == IO_RD) {
+      
+      r_type == 5'b00010;
+            
+      e_fmt       == FMT_3DW_NO_DATA;
+      fmt         == 3'b000;
+      addr[63:32] == 0;
+      addr[31:2] inside {[32'h4 : 32'h100]};
+        
+        
+        payload.size() == 0;
+      
+        length == 1;
+      
+        first_BE inside {4'b0001,4'b0011,4'b0111,4'b1111,4'b1000,4'b1100,4'b1110};
+        
+        last_BE  inside {4'b0000};
+    }
+  }
+      
+  constraint IO_WR_CONSTRAINT {
+    
+    if(e_type == IO_WR) {
+      
+      r_type == 5'b00010;
+          
+      e_fmt       == FMT_3DW_DATA;
+      fmt         == 3'b010;
+      addr[63:32] == 0;
+      addr[31:2] inside {[32'h4 : 32'h100]};
+        
+        
+      payload.size() == 1;
+      
+        length == 1;
+      
+        first_BE inside {4'b0001,4'b0011,4'b0111,4'b1111,4'b1000,4'b1100,4'b1110};
+        
+        last_BE  inside {4'b0000};
+    }
+  }
+      
+  constraint CFG_RD0_CONSTRAINT {
+    
+    if(e_type == CFG_RD0) {
+      
+      r_type == 5'b00100;
+
+      e_fmt == FMT_3DW_NO_DATA;
+
+      fmt   == 3'b000;
+
+      payload.size() == 0;
+
+      length == 1;
+
+      bus        inside {[0:255]};
+      device     inside {[0:31]};
+      function_n inside {[0:7]};
+
+      ext_register_num inside {[0:15]};
+      register_num     inside {[0:255]};
+
+      first_BE inside {4'b0001, 4'b0011, 4'b0111, 4'b1111, 4'b1000, 4'b1100, 4'b1110};
+
+     last_BE == {4'b0000};
+    }
+  }
+      
+  constraint CFG_WR0_CONSTRAINT {
+    
+    if(e_type == CFG_WR0) {
+      
+      r_type == 5'b00100;
+
+      e_fmt == FMT_3DW_DATA;
+      fmt   == 3'b010;
+
+      payload.size() == 1;
+
+      length == 1;
+
+      bus        inside {[0:255]};
+      device     inside {[0:31]};
+      function_n inside {[0:7]};
+
+      ext_register_num inside {[0:15]};
+      register_num     inside {[0:255]};
+
+      first_BE inside {4'b0001, 4'b0011, 4'b0111, 4'b1111, 4'b1000, 4'b1100, 4'b1110};
+ 
+      last_BE == 4'b0000;
+    }
+  }
+      
+  constraint CFG_RD1_CONSTRAINT {
+
+    if(e_type == CFG_RD1) {
+
+      r_type == 5'b00101;
+
+      e_fmt == FMT_3DW_NO_DATA;
+      fmt   == 3'b000;
+
+      payload.size() == 0;
+
+      length == 1;
+
+      bus        inside {[0:255]};
+      device     inside {[0:31]};
+      function_n inside {[0:7]};
+
+      ext_register_num inside {[0:15]};
+      register_num     inside {[0:255]};
+
+      first_BE inside {4'b0001, 4'b0011, 4'b0111, 4'b1111, 4'b1000, 4'b1100, 4'b1110};
+
+      last_BE == 4'b0000;
+    }
+  }
+      
+  constraint CFG_WR1_CONSTRAINT {
+
+    if(e_type == CFG_WR1) {
+
+      r_type == 5'b00101;
+
+      e_fmt == FMT_3DW_DATA;
+      fmt   == 3'b010;
+
+      payload.size() == 1;
+
+      length == 1;
+
+      bus        inside {[0:255]};
+      device     inside {[0:31]};
+      function_n inside {[0:7]};
+
+      ext_register_num inside {[0:15]};
+      register_num     inside {[0:255]};
+
+      first_BE inside {4'b0001, 4'b0011, 4'b0111, 4'b1111, 4'b1000, 4'b1100, 4'b1110};
+
+      last_BE == 4'b0000;
+    }
+  }
+      
+  constraint CPL_CONSTRAINT {
+
+    if(e_type == CPL) {
+
+      r_type == 5'b01010;
+
+      e_fmt == FMT_3DW_NO_DATA;
+      fmt   == 3'b000;
+
+      payload.size() == 0;
+
+      length inside {[0:1024]};
+
+      completer_id inside {[0:16'hFFFF]};
+
+      compl_status inside {[0:7]};
+
+      bcm inside {0,1};
+
+      byte_count inside {[0:1024]};
+
+      lower_addr inside {[0:127]};
+    }
+  }
+      
+  constraint CPL_DATA_CONSTRAINT {
+    
+    if(e_type == CPL_DATA) {
+
+      r_type == 5'b01010;
+
+      e_fmt == FMT_3DW_DATA;
+      fmt   == 3'b010;
+
+      payload.size() inside {[1:1024]};
+
+      length == payload.size();
+
+      completer_id inside {[0:16'hFFFF]};
+
+      compl_status inside {[0:7]};
+
+      bcm inside {0,1};
+
+      byte_count inside {[1:4096]};
+
+      lower_addr inside {[0:127]};
+    }
+  }
+      
+  constraint RESERVED_BITS_CONSTRAINT {
+    R1 == 0;
+    R2 == 0;
+    R3 == 0;
+    R4 == 2'b00;
+  }
+
+  constraint TRAFFIC_CLASS_CONSTRAINT {
+    tc inside {[0:7]};
+  }
+      
+  constraint ATTRIBUTE_1_CONSTRAINT {
+    attr_1 inside {0,1};
+  }
+      
+  constraint TLP_PROCESSING_HINTS_CONSTRAINT {
+    th inside {0,1};
+  }
+      
+  constraint TLP_DIGEST_CONSTRAINT {
+    td inside {0,1};
+  }
+      
+  constraint ERROR_POISON_CONSTRAINT {
+    ep inside {0,1};
+  }
+      
+  constraint ADDRESS_TRANSLATION_CONSTRAINT {
+    at inside {2'b10};
+  }
+      
+  constraint BUS_CONSTRAINT {
+    bus inside {8'b0};
+  }
+      
+  constraint DEVICE_CONSTRAINT {
+    device inside {5'b1};
+  }
+      
+  constraint FUNCTION_CONSTRAINT {
+    function_n inside {3'b0};
+  }
+      
+  constraint TAG_CONSTRAINT {
+    tag inside {[0:255]};
+  }
+
+
+    function void pack_tlp();
+    
+    bit [31:0] dw;
+    
+    /////////////////////////////////////////////////////////   DOUBLE WORD ZERO (BYTE 0)   /////////////////////////////////////////////////////////////////////////
+    
+  case(e_type)
+
+    CPL : begin
+      fmt    = 3'b000;
+      r_type = 5'b01010;
+    end
+
+    CPL_DATA : begin
+      fmt    = 3'b010;
+      r_type = 5'b01010;
+    end
+
+  endcase
+
+  tlp_q.delete();
+    
+    dw = {fmt, r_type, R1, tc, R2, attr_1, R3, th, td, ep, attr_2, at, length};
+    
+    tlp_q.push_back(dw);
+    
+    /////////////////////////////////////////////////////////   DOUBLE WORD ONE (BYTE 4)   //////////////////////////////////////////////////////////////////////////
+    
+    case(e_type)
+      
+    MEM_RD, MEM_WR, IO_RD, IO_WR, CFG_RD0, CFG_WR0, CFG_RD1, CFG_WR1, MSG_RTRC, MSG_RBA, MSG_RBI, MSG_IBD, MSG_ILTAR, MSG_GARTRC : begin
+      
+      dw = {req_id, tag, last_BE, first_BE};
+      
+      tlp_q.push_back(dw);
+    
+    end
+
+    CPL, CPL_DATA : begin
+      
+      dw = {completer_id, compl_status, bcm, byte_count};
+      
+      tlp_q.push_back(dw);
+    
+    end
+    
+    endcase
+    
+    /////////////////////////////////////////////////////////   DOUBLE WORD TWO (BYTE 8)   //////////////////////////////////////////////////////////////////////////
+    
+    case(e_type)
+      
+    MEM_RD, MEM_WR : begin
+      
+      if((e_fmt == FMT_3DW_DATA) || (e_fmt == FMT_3DW_NO_DATA)) begin
+        
+        dw = {addr[31:2], R4};
+        tlp_q.push_back(dw);
+      end
+
+      else begin
+        
+        tlp_q.push_back(addr[63:32]);
+        dw = {addr[31:2], R4};
+        tlp_q.push_back(dw);
+      end
+    
+    end
+      
+      IO_RD, IO_WR : begin
+        
+        dw = {addr[31:2], R4};
+        tlp_q.push_back(dw);
+      
+      end
+      
+      CFG_RD0, CFG_WR0, CFG_RD1, CFG_WR1 : begin
+        
+        dw = {bus, device, function_n, R5, ext_register_num, register_num, R4};
+        tlp_q.push_back(dw);
+      
+      end
+
+    CPL, CPL_DATA : begin
+      
+      dw = {req_id, tag, R6, lower_addr};
+      tlp_q.push_back(dw);
+    
+    end
+
+//     MSG_RTRC, MSG_RBA, MSG_RBI, MSG_IBD, MSG_ILTAR, MSG_GARTRC : begin
+      
+//       tlp_q.push_back(msg_dw2);
+      
+//       if(e_fmt inside {FMT_4DW_NO_DATA, FMT_4DW_DATA})
+//         tlp_q.push_back(msg_dw3);
+    
+//     end
+    
+    endcase
+    
+    ///////////////    PAYLOAD     ////////////////////
+    
+    foreach(payload[i])
+      tlp_q.push_back(payload[i]);
+    
+    /////////////////    ECRC   ///////////////////
+    
+    if(td) begin
+      
+      bit [31:0] ecrc;
+      
+      ecrc = calculate_ecrc();
+      
+      tlp_q.push_back(ecrc);
+    end
+    
+    endfunction
+    
+    function bit [31:0] calculate_ecrc();
+      bit [31:0] crc;
+      int i; 
+      byte bits;
+      bit data_bit;
+      bit feedback;
+      
+      crc = 32'hFFFF_FFFF;
+      
+      foreach(tlp_q[i]) begin
+        
+        for(int b = 0; b < 32; b++) begin
+          
+          data_bit  = tlp_q[i][b];
+          feedback  = crc[0] ^ data_bit;
+          crc = crc << 1;
+          
+          if(feedback)
+            crc ^= 32'h04C11DB7;
+        end
+      end
+      
+      return ~crc;
+    
+    endfunction : calculate_ecrc
+
 endclass : Sequence_item
   
   
