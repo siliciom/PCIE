@@ -40,6 +40,8 @@ class pcie_base_test extends uvm_test;
       rc_name    = $sformatf("RC_Env_%0d", i);
       rc_cfg[i]  = env_cfg::type_id::create($sformatf("rc_cfg_%0d", i));
       rc_cfg[i].mode = RC_MODE;
+      rc_cfg[i].gen  = `PCIE_NUM_RC_GEN;   // set advertised PCIe generation
+      rc_cfg[i].check_gen();
       uvm_config_db#(env_cfg)::set(this, {rc_name, ".*"}, "env_cfg", rc_cfg[i]);
       uvm_config_db#(env_cfg)::set(this,  rc_name,        "env_cfg", rc_cfg[i]);
       uvm_config_db#(TL_Scoreboard)::set(this, rc_name, "TL_Scb", TL_Scb);
@@ -50,6 +52,8 @@ class pcie_base_test extends uvm_test;
       ep_name    = $sformatf("EP_Env_%0d", i);
       ep_cfg[i]  = env_cfg::type_id::create($sformatf("ep_cfg_%0d", i));
       ep_cfg[i].mode = EP_MODE;
+      ep_cfg[i].gen  = `PCIE_NUM_EP_GEN;   // set advertised PCIe generation
+      ep_cfg[i].check_gen();
       uvm_config_db#(env_cfg)::set(this, {ep_name, ".*"}, "env_cfg", ep_cfg[i]);
       uvm_config_db#(env_cfg)::set(this,  ep_name,        "env_cfg", ep_cfg[i]);
       uvm_config_db#(TL_Scoreboard)::set(this, ep_name, "TL_Scb", TL_Scb);

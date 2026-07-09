@@ -90,7 +90,8 @@ class PCIe_MAC_driver extends uvm_driver #(Sequence_item);
     DETECT_QUIET, DETECT_ACTIVE, POLLING_ACTIVE, POLLING_COMPLIANCE,
     POLLING_CONFIGURATION, CONFIG_LINKNUM_START, CONFIG_LINKNUM_ACCEPT,
     CONFIG_LANNUM_WAIT, CONFIG_LANENUM_ACCEPT, CONFIG_COMPLETE,
-    CONFIG_IDLE, L0
+    CONFIG_IDLE, L0,
+    RECOVERY_RCVRLOCK, RECOVERY_RCVRCFG, RECOVERY_SPEED, RECOVERY_IDLE
   } rc_ltssm_state_e;
   rc_ltssm_state_e rc_state;
 
@@ -98,9 +99,46 @@ class PCIe_MAC_driver extends uvm_driver #(Sequence_item);
     EP_DETECT_QUIET, EP_DETECT_ACTIVE, EP_POLLING_ACTIVE, EP_POLLING_COMPLIANCE,
     EP_POLLING_CONFIGURATION, EP_CONFIG_LINKNUM_START, EP_CONFIG_LINKNUM_ACCEPT,
     EP_CONFIG_LANNUM_WAIT, EP_CONFIG_LANENUM_ACCEPT, EP_CONFIG_COMPLETE,
-    EP_CONFIG_IDLE, EP_L0
+    EP_CONFIG_IDLE, EP_L0,
+    EP_RECOVERY_RCVRLOCK, EP_RECOVERY_RCVRCFG, EP_RECOVERY_SPEED, EP_RECOVERY_IDLE
   } ep_ltssm_state_e;
   ep_ltssm_state_e ep_state;
+
+  //-----------------------------------------------------------
+  // Recovery entry trigger - a single shared event both RC and EP
+  // threads listen for while sitting in L0. In addition to this
+  // manual trigger, L0 also auto-enters RECOVERY whenever
+  // negotiated_gen > active_gen (see rc_state_l0()/ep_state_l0()).
+  //-----------------------------------------------------------
+  uvm_event ltssm_recovery_req;
+
+  uvm_barrier recovery_rcvrlock;
+  uvm_barrier recovery_rcvrcfg;
+  uvm_barrier recovery_speed;
+  uvm_barrier recovery_idle_bar;
+
+  //-----------------------------------------------------------
+  // Speed-change / RECOVERY bookkeeping.
+  //   active_gen      : Gen the link is CURRENTLY trained/running at.
+  //                      Always starts at 1 - real PCIe always does
+  //                      initial bring-up at 2.5 GT/s regardless of
+  //                      capability.
+  //   partner_rate_id : Rate Identifier byte decoded out of the
+  //                      partner's TS1 ordered sets received during
+  //                      POLLING_ACTIVE.
+  //   negotiated_gen  : min(own cfg.gen, partner's advertised max Gen).
+  //                      If higher than active_gen once L0 is reached,
+  //                      the LTSSM steps through RECOVERY - one
+  //                      generation at a time (Gen1->Gen2->Gen3) -
+  //                      until active_gen catches up.
+  //-----------------------------------------------------------
+  int unsigned rc_active_gen      = 1;
+  bit  [7:0]   rc_partner_rate_id = 8'h00;
+  int unsigned rc_negotiated_gen  = 1;
+
+  int unsigned ep_active_gen      = 1;
+  bit  [7:0]   ep_partner_rate_id = 8'h00;
+  int unsigned ep_negotiated_gen  = 1;
 
   function new(string name, uvm_component parent);
     super.new(name, parent);
@@ -118,6 +156,7 @@ class PCIe_MAC_driver extends uvm_driver #(Sequence_item);
     pma_rx_done    = uvm_event_pool::get_global("pma_rx_done");
     link_up_env    = uvm_event_pool::get_global("link_up_env");
     link_up_env_rx = uvm_event_pool::get_global("link_up_env_rx");
+    ltssm_recovery_req = uvm_event_pool::get_global("ltssm_recovery_req");
 
     polling_active         = uvm_barrier_pool::get_global("p_a");
     polling_compilance     = uvm_barrier_pool::get_global("p_com");
@@ -129,6 +168,11 @@ class PCIe_MAC_driver extends uvm_driver #(Sequence_item);
     config_complete        = uvm_barrier_pool::get_global("c_c");
     config_idle            = uvm_barrier_pool::get_global("c_i");
     lo                     = uvm_barrier_pool::get_global("lo");
+
+    recovery_rcvrlock      = uvm_barrier_pool::get_global("rec_lock");
+    recovery_rcvrcfg       = uvm_barrier_pool::get_global("rec_cfg");
+    recovery_speed         = uvm_barrier_pool::get_global("rec_speed");
+    recovery_idle_bar      = uvm_barrier_pool::get_global("rec_idle");
 
     mac_tx_recv_dll = new("mac_tx_recv_dll", this);
     mac_tx_recv_rx  = new("mac_tx_recv_rx",  this);
@@ -153,6 +197,11 @@ class PCIe_MAC_driver extends uvm_driver #(Sequence_item);
         config_idle.set_threshold(2);
         lo.set_threshold(2);
 
+        recovery_rcvrlock.set_threshold(2);
+        recovery_rcvrcfg.set_threshold(2);
+        recovery_speed.set_threshold(2);
+        recovery_idle_bar.set_threshold(2);
+
         if(!uvm_config_db#(virtual TX_DLL_PCS_Interface)::get(this, "", "DLL_Vif", rc_vif))
           `uvm_fatal("NO_VIF", $sformatf("[%s] TX_DLL_PCS_Interface not set (DLL_Vif missing)", tag))
         if(!uvm_config_db#(virtual pipe_tx_interface)::get(this, "", "pipe_Vif", rc_pvif))
@@ -172,6 +221,11 @@ class PCIe_MAC_driver extends uvm_driver #(Sequence_item);
         config_lane_accept.set_threshold(2);
         config_complete.set_threshold(2);
         config_idle.set_threshold(2);
+
+        recovery_rcvrlock.set_threshold(2);
+        recovery_rcvrcfg.set_threshold(2);
+        recovery_speed.set_threshold(2);
+        recovery_idle_bar.set_threshold(2);
 
         if(!uvm_config_db#(virtual pipe_rx_interface)::get(this, "", "pipe_Vif", ep_pvif))
           `uvm_fatal("NO_VIF", $sformatf("[%s] pipe_rx_interface not set (pipe_Vif missing)", tag))
@@ -252,6 +306,53 @@ class PCIe_MAC_driver extends uvm_driver #(Sequence_item);
   function void os_scramble(inout bit [127:0] os);
     for (int i = 8; i < 113; i = i+8)
       os[i+:8] = d_s(os[i+:8]);
+  endfunction
+
+  //-----------------------------------------------------------
+  // Rate Identifier helpers (shared - operate only on cfg.gen of
+  // whichever instance, RC or EP, calls them).
+  //   rate_id_byte()   : builds the Rate Identifier byte (Symbol 4)
+  //                      embedded into TS1/TS2 ordered sets -
+  //                      bit0=2.5GT/s(Gen1, always set), bit1=5GT/s
+  //                      (Gen2) supported, bit2=8GT/s(Gen3) supported,
+  //                      bit5=Speed Change request (set only when
+  //                      driving Recovery.RcvrCfg for an actual speed
+  //                      change).
+  //   decode_max_gen() : inverse - highest Gen a received Rate
+  //                      Identifier byte advertises.
+  //   gen_to_rate_code(): Gen (1/2/3) -> PIPE Rate[1:0] encoding.
+  //   tag_ts1()        : stamps a TS1/TS2 base ordered set with this
+  //                      instance's own Rate Identifier byte before
+  //                      it goes out on the wire.
+  //-----------------------------------------------------------
+  function bit [7:0] rate_id_byte(int unsigned gen, bit speed_change = 1'b0);
+    bit [7:0] b;
+    b      = 8'h00;
+    b[0]   = 1'b1;        // 2.5 GT/s (Gen1) - always supported
+    b[1]   = (gen >= 2);  // 5.0 GT/s (Gen2) supported
+    b[2]   = (gen >= 3);  // 8.0 GT/s (Gen3) supported
+    b[5]   = speed_change;
+    return b;
+  endfunction
+
+  function int unsigned decode_max_gen(bit [7:0] rate_id);
+    if(rate_id[2])      decode_max_gen = 3;
+    else if(rate_id[1]) decode_max_gen = 2;
+    else                decode_max_gen = 1;
+  endfunction
+
+  function bit [1:0] gen_to_rate_code(int unsigned gen);
+    case(gen)
+      3       : gen_to_rate_code = 2'b10;
+      2       : gen_to_rate_code = 2'b01;
+      default : gen_to_rate_code = 2'b00;
+    endcase
+  endfunction
+
+  function bit [127:0] tag_ts1(bit [127:0] base_ts, bit speed_change = 1'b0);
+    bit [127:0] ts = base_ts;
+    ts[95:88] = rate_id_byte(cfg.gen, speed_change);
+    tag_ts1   = ts;
   endfunction
 
    function void rc_packet_encoding();
@@ -459,12 +560,12 @@ class PCIe_MAC_driver extends uvm_driver #(Sequence_item);
 
   // ---- RC_MODE ----
   task rc_state_polling_active();
-      `uvm_info("TX_LTSSM","POLLING_ACTIVE – sending 10 TS1s",UVM_LOW)
+      `uvm_info("TX_LTSSM",$sformatf("POLLING_ACTIVE – sending 10 TS1s (advertising Gen%0d)",cfg.gen),UVM_LOW)
      
       rc_item.size_tx_rx = 10;
       repeat(10) begin
         @(posedge rc_pvif.PCLK);
-        rc_drive_os(rc_TS1);
+        rc_drive_os(tag_ts1(rc_TS1));
       end
       @(posedge rc_pvif.PCLK);
       rc_pvif.TxDataValid <= 0;
@@ -477,6 +578,16 @@ class PCIe_MAC_driver extends uvm_driver #(Sequence_item);
        polling_active.wait_for();
   if (rc_received_os.size() == 8) begin
       `uvm_info("TX_LTSSM",$sformatf("POLLING_ACTIVE rc_received %p rc_size %d",rc_received_os, rc_received_os.size()),UVM_LOW)
+
+      // Decode partner's (EP's) advertised Rate Identifier out of its
+      // TS1 ordered sets and negotiate the link speed.
+      rc_partner_rate_id = rc_received_os[0][95:88];
+      rc_negotiated_gen  = (cfg.gen < decode_max_gen(rc_partner_rate_id)) ?
+                             cfg.gen : decode_max_gen(rc_partner_rate_id);
+      `uvm_info("TX_LTSSM",
+        $sformatf("Rate negotiation: own Gen%0d, partner rate_id=%08b (max Gen%0d) -> negotiated Gen%0d",
+                   cfg.gen, rc_partner_rate_id, decode_max_gen(rc_partner_rate_id), rc_negotiated_gen),
+        UVM_LOW)
    
     `uvm_info("TX_LTSSM","Barrier passed → 8 consecutive rc_received -> POLLING_CONFIGURATION",UVM_LOW)
       rc_received_os.delete();
@@ -492,12 +603,12 @@ class PCIe_MAC_driver extends uvm_driver #(Sequence_item);
 
   // ---- EP_MODE ----
   task ep_state_polling_active();
-      `uvm_info("RX_LTSSM","POLLING_ACTIVE – sending TS1s",UVM_LOW)
+      `uvm_info("RX_LTSSM",$sformatf("POLLING_ACTIVE – sending TS1s (advertising Gen%0d)",cfg.gen),UVM_LOW)
      
        ep_item.size_rx_tx = 8;
       repeat(8) begin
         @(posedge ep_pvif.PCLK);
-        ep_drive_os(ep_TS1);
+        ep_drive_os(tag_ts1(ep_TS1));
       end
       @(posedge ep_pvif.PCLK);
       ep_pvif.TxDataValid <= 0;
@@ -514,6 +625,16 @@ class PCIe_MAC_driver extends uvm_driver #(Sequence_item);
       polling_active.wait_for();
       if (ep_os.size() >= 8) begin
           `uvm_info("RX_LTSSM",$sformatf("ep_TS1 ep_received %p ep_size %0d",ep_os, ep_os.size()),UVM_LOW)
+
+          // Decode partner's (RC's) advertised Rate Identifier out of
+          // its TS1 ordered sets and negotiate the link speed.
+          ep_partner_rate_id = ep_os[0][95:88];
+          ep_negotiated_gen  = (cfg.gen < decode_max_gen(ep_partner_rate_id)) ?
+                                 cfg.gen : decode_max_gen(ep_partner_rate_id);
+          `uvm_info("RX_LTSSM",
+            $sformatf("Rate negotiation: own Gen%0d, partner rate_id=%08b (max Gen%0d) -> negotiated Gen%0d",
+                       cfg.gen, ep_partner_rate_id, decode_max_gen(ep_partner_rate_id), ep_negotiated_gen),
+            UVM_LOW)
   
           `uvm_info("RX_LTSSM","Barrier passed → 8 consecutive ep_TS1 ep_received -> POLLING_CONFIGURATION",UVM_LOW)
           ep_os.delete();
@@ -563,11 +684,11 @@ class PCIe_MAC_driver extends uvm_driver #(Sequence_item);
   // ---- RC_MODE ----
   task rc_state_polling_configuration();
       `uvm_info("TX_LTSSM","POLLING_CONFIGURATION : rc_TS1 exchange complete - switching TX to TS2",UVM_LOW)
-      `uvm_info("TX_LTSSM","POLLING_CONFIG – sending TS2s",UVM_LOW)
+      `uvm_info("TX_LTSSM",$sformatf("POLLING_CONFIG – sending TS2s (advertising Gen%0d)",cfg.gen),UVM_LOW)
       rc_item.size_tx_rx = 16;
       repeat(16) begin
         @(posedge rc_pvif.PCLK);
-        rc_drive_os(TS2);
+        rc_drive_os(tag_ts1(TS2));
       end
       @(posedge rc_pvif.PCLK);
       rc_pvif.TxDataValid <= 0;
@@ -587,11 +708,11 @@ class PCIe_MAC_driver extends uvm_driver #(Sequence_item);
   task ep_state_polling_configuration();
       
       `uvm_info("RX_LTSSM","POLLING_CONFIGURATION : ep_TS1 exchange complete - switching TX to TS2",UVM_LOW)
-      `uvm_info("RX_LTSSM","POLLING_CONFIG – sending TS2s",UVM_LOW)
+      `uvm_info("RX_LTSSM",$sformatf("POLLING_CONFIG – sending TS2s (advertising Gen%0d)",cfg.gen),UVM_LOW)
       ep_item.size_rx_tx = 8;
       repeat(8) begin
         @(posedge ep_pvif.PCLK);
-        ep_drive_os(TS2);
+        ep_drive_os(tag_ts1(TS2));
       end
       @(posedge ep_pvif.PCLK);
       ep_pvif.TxDataValid <= 0;
@@ -790,11 +911,11 @@ class PCIe_MAC_driver extends uvm_driver #(Sequence_item);
 
   // ---- RC_MODE ----
   task rc_state_config_complete();
-    `uvm_info("TX_LTSSM","CONFIG_COMPLETE",UVM_LOW)
+    `uvm_info("TX_LTSSM",$sformatf("CONFIG_COMPLETE (advertising Gen%0d)",cfg.gen),UVM_LOW)
     rc_item.size_tx_rx = 16;
     repeat (16) begin
       @(posedge rc_pvif.PCLK);
-      rc_drive_os(rc_TS1);
+      rc_drive_os(tag_ts1(rc_TS1));
     end
     @(posedge rc_pvif.PCLK);
     rc_pvif.TxDataValid <= 0;
@@ -815,11 +936,11 @@ class PCIe_MAC_driver extends uvm_driver #(Sequence_item);
 
   // ---- EP_MODE ----
   task ep_state_config_complete();
-    `uvm_info("RX_LTSSM","CONFIG_COMPLETE",UVM_LOW)
+    `uvm_info("RX_LTSSM",$sformatf("CONFIG_COMPLETE (advertising Gen%0d)",cfg.gen),UVM_LOW)
     ep_item.size_rx_tx = 8;
     repeat (8) begin
       @(posedge ep_pvif.PCLK);
-      ep_drive_os(ep_TS1);
+      ep_drive_os(tag_ts1(ep_TS1));
     end
     @(posedge ep_pvif.PCLK);
     ep_pvif.TxDataValid <= 0;
@@ -911,6 +1032,14 @@ class PCIe_MAC_driver extends uvm_driver #(Sequence_item);
       //lo.wait_for();
      // link_up.trigger();
       link_up_env.trigger();
+
+      if (rc_negotiated_gen > rc_active_gen) begin
+        `uvm_info("TX_LTSSM",
+          $sformatf("Speed mismatch: running Gen%0d, negotiated Gen%0d -> RECOVERY",
+                     rc_active_gen, rc_negotiated_gen), UVM_LOW)
+        rc_state = RECOVERY_RCVRLOCK;
+      end
+      else begin
          fork
   forever begin
       begin
@@ -1003,6 +1132,7 @@ class PCIe_MAC_driver extends uvm_driver #(Sequence_item);
     end
     end
       join
+      end
   endtask
 
   // ---- EP_MODE ----
@@ -1010,6 +1140,17 @@ class PCIe_MAC_driver extends uvm_driver #(Sequence_item);
         `uvm_info("RX_LTSSM","L0 - link is up",UVM_LOW)
      // link_up.trigger();
            link_up_env_rx.trigger();
+
+      if (ep_negotiated_gen > ep_active_gen) begin
+        `uvm_info("RX_LTSSM",
+          $sformatf("Speed mismatch: running Gen%0d, negotiated Gen%0d -> RECOVERY",
+                     ep_active_gen, ep_negotiated_gen), UVM_LOW)
+        ep_state = EP_RECOVERY_RCVRLOCK;
+      end
+      else begin
+	      `uvm_info("RX_LTSSM",
+          $sformatf("Speed mismatch: running Gen%0d, negotiated Gen%0d -> RECOVERY",
+                     ep_active_gen, ep_negotiated_gen), UVM_LOW)
       fork
   forever begin 
          begin
@@ -1100,13 +1241,210 @@ class PCIe_MAC_driver extends uvm_driver #(Sequence_item);
       end
       end
       join
+        end 
   endtask
+
+// =====================================================================
+// RECOVERY sub-state machine (per diagram):
+//   L0 -> Recovery.RcvrLock -> Recovery.RcvrCfg -> {Recovery.Speed | Recovery.Idle}
+//   Recovery.Speed -> Recovery.RcvrLock   (re-lock at the NEW speed)
+//   Recovery.Idle  -> L0
+//
+// Flow per Gen-step:
+//   1) RcvrLock : re-lock TS1s at CURRENT speed
+//   2) RcvrCfg  : advertise TS2s; speed_change=1 if active_gen < negotiated_gen
+//   3) if speed_change was actually needed -> Speed -> (loops back) RcvrLock
+//      else                                -> Idle -> L0
+// =====================================================================
+
+// ---- RC_MODE ----
+int unsigned rc_target_gen;
+
+task rc_state_recovery_rcvrlock();
+    `uvm_info("TX_LTSSM",
+      $sformatf("Recovery.RcvrLock - relocking @ Gen%0d (negotiated Gen%0d)",
+                 rc_active_gen, rc_negotiated_gen), UVM_LOW)
+
+    rc_pvif.TxElecIdle <= 0;
+    repeat(8) begin
+      @(posedge rc_pvif.PCLK);
+      rc_drive_os(tag_ts1(rc_TS1));   // TS1 @ CURRENT speed, no speed_change bit
+    end
+    @(posedge rc_pvif.PCLK);
+    rc_pvif.TxDataValid <= 0;
+
+    wait(rc_received_os.size() > 0);
+    recovery_rcvrlock.wait_for();
+    rc_received_os.delete();
+
+    `uvm_info("TX_LTSSM","Recovery.RcvrLock done -> Recovery.RcvrCfg",UVM_LOW)
+    rc_state = RECOVERY_RCVRCFG;
+endtask
+
+task rc_state_recovery_rcvrcfg();
+    bit speed_change;
+    speed_change = (rc_active_gen < rc_negotiated_gen);
+
+    `uvm_info("TX_LTSSM",
+      $sformatf("Recovery.RcvrCfg - advertising TS2s (speed_change=%0b)", speed_change), UVM_LOW)
+
+    repeat(8) begin
+      @(posedge rc_pvif.PCLK);
+      rc_drive_os(tag_ts1(TS2, speed_change));
+    end
+    @(posedge rc_pvif.PCLK);
+    rc_pvif.TxDataValid <= 0;
+
+    wait(rc_received_os.size() > 0);
+    recovery_rcvrcfg.wait_for();
+    rc_received_os.delete();
+
+    if (speed_change) begin
+      rc_target_gen = rc_active_gen + 1;
+      `uvm_info("TX_LTSSM",
+        $sformatf("Recovery.RcvrCfg done -> Recovery.Speed (Gen%0d -> Gen%0d)",
+                   rc_active_gen, rc_target_gen), UVM_LOW)
+      rc_state = RECOVERY_SPEED;
+    end
+    else begin
+      `uvm_info("TX_LTSSM","Recovery.RcvrCfg done -> Recovery.Idle (no speed change needed)",UVM_LOW)
+      rc_state = RECOVERY_IDLE;
+    end
+endtask
+
+task rc_state_recovery_speed();
+    rc_pvif.TxElecIdle  <= 1;
+    rc_pvif.TxDataValid <= 0;
+    rc_pvif.Rate        <= gen_to_rate_code(rc_target_gen);
+    rc_active_gen         = rc_target_gen;
+
+    recovery_speed.wait_for();
+    repeat(4) @(posedge rc_pvif.PCLK);   // let PCLK settle at the new rate
+    rc_pvif.TxElecIdle <= 0;
+
+    `uvm_info("TX_LTSSM",
+      $sformatf("Recovery.Speed done -> now running at Gen%0d -> Recovery.RcvrLock (re-lock)",
+                 rc_active_gen), UVM_LOW)
+
+    // Per diagram: Speed always loops back to RcvrLock to re-lock at the new speed
+    rc_state = RECOVERY_RCVRLOCK;
+endtask
+
+task rc_state_recovery_idle();
+    repeat(8) begin
+      @(posedge rc_pvif.PCLK);
+      rc_pvif.TxData      <= {2'b01, 128'h0};
+      rc_pvif.TxDataValid <= 1;
+    end
+    @(posedge rc_pvif.PCLK);
+    rc_pvif.TxDataValid <= 0;
+
+    wait(rc_received_os.size() > 0);
+    recovery_idle_bar.wait_for();
+    rc_received_os.delete();
+
+    `uvm_info("TX_LTSSM",
+      $sformatf("Recovery.Idle done -> L0 @ Gen%0d (final speed reached)", rc_active_gen), UVM_LOW)
+    rc_state = L0;
+endtask
+
+// ---- EP_MODE ----
+int unsigned ep_target_gen;
+
+task ep_state_recovery_rcvrlock();
+    `uvm_info("RX_LTSSM",
+      $sformatf("Recovery.RcvrLock - relocking @ Gen%0d (negotiated Gen%0d)",
+                 ep_active_gen, ep_negotiated_gen), UVM_LOW)
+
+    ep_pvif.TxElecIdle <= 0;
+    repeat(8) begin
+      @(posedge ep_pvif.PCLK);
+      ep_drive_os(tag_ts1(ep_TS1));   // TS1 @ CURRENT speed, no speed_change bit
+    end
+    @(posedge ep_pvif.PCLK);
+    ep_pvif.TxDataValid <= 0;
+
+    wait(ep_os.size() > 0);
+    recovery_rcvrlock.wait_for();
+    ep_os.delete();
+
+    `uvm_info("RX_LTSSM","Recovery.RcvrLock done -> Recovery.RcvrCfg",UVM_LOW)
+    ep_state = EP_RECOVERY_RCVRCFG;
+endtask
+
+task ep_state_recovery_rcvrcfg();
+    bit speed_change;
+    speed_change = (ep_active_gen < ep_negotiated_gen);
+
+    `uvm_info("RX_LTSSM",
+      $sformatf("Recovery.RcvrCfg - advertising TS2s (speed_change=%0b)", speed_change), UVM_LOW)
+
+    repeat(8) begin
+      @(posedge ep_pvif.PCLK);
+      ep_drive_os(tag_ts1(TS2, speed_change));
+    end
+    @(posedge ep_pvif.PCLK);
+    ep_pvif.TxDataValid <= 0;
+
+    wait(ep_os.size() > 0);
+    recovery_rcvrcfg.wait_for();
+    ep_os.delete();
+
+    if (speed_change) begin
+      ep_target_gen = ep_active_gen + 1;
+      `uvm_info("RX_LTSSM",
+        $sformatf("Recovery.RcvrCfg done -> Recovery.Speed (Gen%0d -> Gen%0d)",
+                   ep_active_gen, ep_target_gen), UVM_LOW)
+      ep_state = EP_RECOVERY_SPEED;
+    end
+    else begin
+      `uvm_info("RX_LTSSM","Recovery.RcvrCfg done -> Recovery.Idle (no speed change needed)",UVM_LOW)
+      ep_state = EP_RECOVERY_IDLE;
+    end
+endtask
+
+task ep_state_recovery_speed();
+    ep_pvif.TxElecIdle  <= 1;
+    ep_pvif.TxDataValid <= 0;
+    ep_pvif.Rate        <= gen_to_rate_code(ep_target_gen);
+    ep_active_gen         = ep_target_gen;
+
+    recovery_speed.wait_for();
+    repeat(4) @(posedge ep_pvif.PCLK);   // let PCLK settle at the new rate
+    ep_pvif.TxElecIdle <= 0;
+
+    `uvm_info("RX_LTSSM",
+      $sformatf("Recovery.Speed done -> now running at Gen%0d -> Recovery.RcvrLock (re-lock)",
+                 ep_active_gen), UVM_LOW)
+
+    // Per diagram: Speed always loops back to RcvrLock to re-lock at the new speed
+    ep_state = EP_RECOVERY_RCVRLOCK;
+endtask
+
+task ep_state_recovery_idle();
+    repeat(8) begin
+      @(posedge ep_pvif.PCLK);
+      ep_pvif.TxData      <= {2'b01, 128'h0};
+      ep_pvif.TxDataValid <= 1;
+    end
+    @(posedge ep_pvif.PCLK);
+    ep_pvif.TxDataValid <= 0;
+
+    wait(ep_os.size() > 0);
+    recovery_idle_bar.wait_for();
+    ep_os.delete();
+
+    `uvm_info("RX_LTSSM",
+      $sformatf("Recovery.Idle done -> L0 @ Gen%0d (final speed reached)", ep_active_gen), UVM_LOW)
+    ep_state = EP_L0;
+endtask
 
   // ---- RC_MODE ----
   task rc_state_detect_quiet();
     rc_pvif.TxElecIdle  <= 1;
     rc_pvif.TxDataValid <= 0;
     rc_pvif.Rate        <= 2'b00;
+    rc_active_gen        = 1;
     `uvm_info("TX_LTSSM","DETECT_QUIET",UVM_LOW)
     @(posedge rc_pvif.PCLK);
     rc_state = DETECT_ACTIVE;
@@ -1117,6 +1455,7 @@ class PCIe_MAC_driver extends uvm_driver #(Sequence_item);
     ep_pvif.TxElecIdle  <= 1;
     ep_pvif.TxDataValid <= 0;
     ep_pvif.Rate        <= 2'b00;
+    ep_active_gen        = 1;
     `uvm_info("RX_LTSSM","DETECT_QUIET",UVM_LOW)
     @(posedge ep_pvif.PCLK);
     ep_state = EP_DETECT_ACTIVE;
@@ -1143,6 +1482,10 @@ class PCIe_MAC_driver extends uvm_driver #(Sequence_item);
             CONFIG_COMPLETE       : rc_state_config_complete();
             CONFIG_IDLE           : rc_state_config_idle();
             L0                    : rc_state_l0();
+            RECOVERY_RCVRLOCK     : rc_state_recovery_rcvrlock();
+            RECOVERY_RCVRCFG      : rc_state_recovery_rcvrcfg();
+            RECOVERY_SPEED        : rc_state_recovery_speed();
+            RECOVERY_IDLE         : rc_state_recovery_idle();
           endcase
         end
       end
@@ -1163,6 +1506,10 @@ class PCIe_MAC_driver extends uvm_driver #(Sequence_item);
             EP_CONFIG_COMPLETE       : ep_state_config_complete();
             EP_CONFIG_IDLE           : ep_state_config_idle();
             EP_L0                    : ep_state_l0();
+            EP_RECOVERY_RCVRLOCK     : ep_state_recovery_rcvrlock();
+            EP_RECOVERY_RCVRCFG      : ep_state_recovery_rcvrcfg();
+            EP_RECOVERY_SPEED        : ep_state_recovery_speed();
+            EP_RECOVERY_IDLE         : ep_state_recovery_idle();
           endcase
         end
       end
@@ -1174,3 +1521,4 @@ class PCIe_MAC_driver extends uvm_driver #(Sequence_item);
   endtask
 
 endclass
+

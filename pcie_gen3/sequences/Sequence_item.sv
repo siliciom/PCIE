@@ -1,10 +1,5 @@
 class Sequence_item extends uvm_sequence_item;
   bit [31:0] tlp_q[$];
-//   bit [31:0] tl_rx_q[$:159] = {32'h44108801, 32'h80001, 32'h200d94, 32'h275257e7, 32'hb9c24057};
-  
-  
-  // Generic TLP Fields //
-  
   rand tlp_type_e e_type;
   rand fmt_e      e_fmt;
   rand packet_type_e pkt_type;

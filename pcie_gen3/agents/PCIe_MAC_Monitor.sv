@@ -16,6 +16,9 @@ class PCIe_MAC_monitor extends uvm_monitor;
   uvm_analysis_port #(Sequence_item) mac_rx_dll_port;
   uvm_analysis_port #(Sequence_item) mac_rx_rx_port;
 
+ // uvm_analysis_port #(Sequence_item) mac_sb_rc_port;
+ // uvm_analysis_port #(Sequence_item) mac_sb_ep_port;
+
   Sequence_item rc_item;
   bit [31:0]  rc_r_data[$];
   bit [31:0]  rc_mac_data[$];
@@ -316,7 +319,7 @@ class PCIe_MAC_monitor extends uvm_monitor;
       //  if(rc_pvif.RxValid == 0) begin
      `uvm_info("MAC_TX_MON",$sformatf("ODERED SETS = %p", rc_item.os_t),UVM_LOW)
           mac_tx_rx_port.write(rc_item);
-          
+         // mac_rc_sb_port.write(rc_item); 
            rc_item.os_t.delete();
       // end
    end
@@ -511,6 +514,7 @@ class PCIe_MAC_monitor extends uvm_monitor;
       //  if(ep_pvif.RxValid == 0) begin
      `uvm_info("MAC_RX_MON", $sformatf("EP MAC RX ORDEREDSET CAPTURED %p  time = %t",ep_tlp_queue,$time),UVM_LOW)
            mac_rx_rx_port.write(ep_item);
+         // mac_ep_sb_port.write(ep_item); 
            
           ep_item.os_t.delete();
       // end

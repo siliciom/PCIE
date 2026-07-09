@@ -32,7 +32,7 @@ class Env_Top extends uvm_env;
     if (!uvm_config_db#(TL_Scoreboard)::get(this, "", "TL_Scb", TL_Scb))
       `uvm_fatal("Env_Top",
         $sformatf("TL_Scoreboard handle not found for %s", get_full_name()))
-
+  
     // PCIe_LUT is local to each env — EP driver gets it via lut_handle
     PCIe_LUT = RX_PCIe_LUT::type_id::create("PCIe_LUT", this);
     uvm_config_db#(RX_PCIe_LUT)::set(this, "*", "lut_handle", PCIe_LUT);
@@ -49,10 +49,12 @@ class Env_Top extends uvm_env;
 
     if (cfg.mode == RC_MODE) begin
       PCIe_TL_Agnt.PCIe_TL_Mon.TX_TL_Send.connect(TL_Scb.TX_TL_Recv);
+      //TX_MAC_Agnt.mon.mac_sb_rc_port.connect(MAC_Scb.Mac_rc_recv);
       // RX_TL_Send and RX_TL_MON_Send never fire in RC mode — no connection needed
     end else begin
       // EP_MODE
       PCIe_TL_Agnt.PCIe_TL_Mon.RX_TL_Send.connect(TL_Scb.RX_TL_Recv);
+      //TX_MAC_Agnt.mon.mac_sb_ep_port.connect(MAC_Scb.Mac_ep_recv);
       PCIe_TL_Agnt.PCIe_TL_Mon.RX_TL_MON_Send.connect(PCIe_LUT.RX_LUT_imp);
       // TX_TL_Send never fires in EP mode — no connection needed
     end

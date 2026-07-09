@@ -1,6 +1,7 @@
 /////////////////////////////////////
 //   TOP MODULE                    //
 /////////////////////////////////////
+`timescale 1ns/100ps
 `include "TX_TL_DL_Interface.sv"
 `include "RX_TL_DL_Interface.sv"
 `include "TX_DL_PCS_Interface.sv"
@@ -18,19 +19,13 @@ import Package::*;
 module PCIe_top;
 
 
-// NUM_RC - No of instance created that corresponds to the Multiple RC ENV it
-// can be given using +define+NUM_RC while cpmpilation default it is one
   localparam int unsigned NUM_RC = `PCIE_NUM_RC;
 
-// NUM_RC - No of instance created that corresponds to the Multiple EP ENV 
-// can be given using +define+NUM_EP while cpmpilation default it is one
   localparam int unsigned NUM_EP = `PCIE_NUM_EP;
 
-// Top clock generation with frequency = 250MHz
   bit CLK = 0;
   bit RESET;
 
-  always #2 CLK = ~CLK;
 
   initial begin
     RESET = 0;
@@ -38,17 +33,58 @@ module PCIe_top;
     RESET = 1;
   end
 
+  //-------------------------------------------------------------
+  bit CLK_GEN1 = 0;   // 250 MHz - Gen1
+  bit CLK_GEN2 = 0;   // 500 MHz - Gen2
+  bit CLK_GEN3 = 0;   // 1 GHz   - Gen3
+
+  always #2 CLK = ~CLK;
+  always #2   CLK_GEN1 = ~CLK_GEN1;
+  always #1   CLK_GEN2 = ~CLK_GEN2;
+  always #0.5 CLK_GEN3 = ~CLK_GEN3;
+
+  logic RC_PCLK [NUM_RC];
+  logic EP_PCLK [NUM_EP];
+
   // RC-side interfaces - one set per RC instance
   TX_TL_DL_Interface    RC_TX_TL_DLL   [NUM_RC] (CLK, RESET);
   TX_DLL_PCS_Interface  RC_TX_DLL_PCS  [NUM_RC] (CLK, RESET);
-  pipe_tx_interface     RC_TX_PIPE     [NUM_RC] (CLK, RESET);
+  pipe_tx_interface     RC_TX_PIPE     [NUM_RC] (RC_PCLK, RESET);
   phy_tx_interface      RC_PHY_TX      [NUM_RC] ();
 
   // EP-side interfaces - one set per EP instance
   RX_TL_DL_Interface    EP_RX_TL_DLL   [NUM_EP] (CLK, RESET);
   RX_DLL_PCS_Interface  EP_RX_DLL_PCS  [NUM_EP] (CLK, RESET);
-  pipe_rx_interface     EP_RX_PIPE     [NUM_EP] (CLK, RESET);
+  pipe_rx_interface     EP_RX_PIPE     [NUM_EP] (EP_PCLK, RESET);
   phy_rx_interface      EP_PHY_RX      [NUM_EP] ();
+
+  //-------------------------------------------------------------
+  // Per-instance PCLK mux - Rate is driven by PCIe_MAC_driver:
+  //   2'b00 = Gen1, 2'b01 = Gen2, 2'b10 = Gen3.
+  //-------------------------------------------------------------
+  generate
+    for(genvar i = 0; i < NUM_RC; i++) begin : g_rc_pclk_mux
+      always_comb begin
+        case(RC_TX_PIPE[i].Rate)
+          2'b01   : RC_PCLK[i] = CLK_GEN2;
+          2'b10   : RC_PCLK[i] = CLK_GEN3;
+          default : RC_PCLK[i] = CLK_GEN1;
+        endcase
+      end
+    end
+  endgenerate
+
+  generate
+    for(genvar i = 0; i < NUM_EP; i++) begin : g_ep_pclk_mux
+      always_comb begin
+        case(EP_RX_PIPE[i].Rate)
+          2'b01   : EP_PCLK[i] = CLK_GEN2;
+          2'b10   : EP_PCLK[i] = CLK_GEN3;
+          default : EP_PCLK[i] = CLK_GEN1;
+        endcase
+      end
+    end
+  endgenerate
 
   // NUM_PAIRED just to take minimum value of anyone gets supported 
   // it will be removed when switch comes into a place
