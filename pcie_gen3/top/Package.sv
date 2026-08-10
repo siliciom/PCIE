@@ -2,9 +2,13 @@ package Package;
 `include "uvm_macros.svh"
 import uvm_pkg::*;
 `include "pcie_top_defines.svh"
-`include "../env/env_config.sv"
 `include "../sequences/Sequence_item.sv"
+`include "../env/env_config.sv"
+`include "../env/FC_Manager.sv"
+`include "../agents/VC_Arbiter.sv"
+`include "../agents/TAG_Manager.sv"
 `include "../sequences/Sequence.sv"
+`include "../agents/EP_Config_Space.sv"
 `include "../agents/RX_PCIe_LUT.sv"
 `include "../agents/PCIe_TL_Sequencer.sv"
 `include "../agents/PCIe_DLL_Sequencer.sv"
@@ -27,4 +31,3 @@ import uvm_pkg::*;
 `include "../env/Env_Top.sv"
 `include "../tests/Test.sv"
 endpackage
-

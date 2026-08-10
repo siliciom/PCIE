@@ -1,5 +1,10 @@
 class Sequence_item extends uvm_sequence_item;
   bit [31:0] tlp_q[$];
+//   bit [31:0] tl_rx_q[$:159] = {32'h44108801, 32'h80001, 32'h200d94, 32'h275257e7, 32'hb9c24057};
+  
+  
+  // Generic TLP Fields //
+  
   rand tlp_type_e e_type;
   rand fmt_e      e_fmt;
   rand packet_type_e pkt_type;
@@ -7,6 +12,7 @@ class Sequence_item extends uvm_sequence_item;
   rand bit[2:0]   fmt;
        bit        R1;
   rand bit[2:0]   tc;
+  rand vc_id_e    vc;          // resolved by map_tc_to_vc() from tc + the active tc2vc_table
        bit        R2;
   rand bit        attr_1;
        bit        R3;
@@ -16,30 +22,34 @@ class Sequence_item extends uvm_sequence_item;
   rand bit[1:0]   attr_2;
   rand bit[1:0]   at;
   rand bit[9:0]   length;
-  rand bit[31:0]  payload[];
+  rand logic[31:0]  payload[];
   
   //  Memory TLP Fields //
   
   rand bit[7:0]  bus;
   rand bit[4:0]  device;
-  rand bit[2:0]  function_n;         
+  rand bit[2:0]  function_n; 
+  rand bit[7:0]  ep_bus;
+  rand bit[4:0]  ep_device;
+  rand bit[2:0]  ep_function_n;  
   rand bit[7:0]  tag;
   rand bit[3:0]  last_BE;
   rand bit[3:0]  first_BE;
   rand bit[63:0] addr;
        bit[1:0]  R4;
        bit[15:0] req_id; 
+  rand bit[15:0] ep_req_id; 
        bit[15:0] completer_id; 
   rand bit[2:0]  compl_status;
   rand bit       bcm;
-  rand bit[9:0]  byte_count;
+  rand bit[11:0] byte_count;
   rand bit[3:0]  ext_register_num;
-  rand bit[7:0]  register_num;
+  rand bit[5:0]  register_num;
   rand bit[6:0]  lower_addr;
        bit[3:0]  R5;
        bit       R6;
        bit[31:0] ECRC;
-  	   bit       ecrc_error;
+       bit       ecrc_error;
 
   //-----------------------------------------------------------
   // PMA layer fields
@@ -49,14 +59,14 @@ class Sequence_item extends uvm_sequence_item;
   //-----------------------------------------------------------
 
   // pma rx side signals (EP_MODE)
-  bit [129:0] pma_rx_data [$];
-  bit [129:0] pma_tx_data_t [$];
-  static int size_tx_rx;
+  bit [129:0] pma_rx_data [`PCIE_NUM_LANES][$];
+  bit [129:0] pma_tx_data_t [`PCIE_NUM_LANES][$];
+  static int size_tx_rx[$];
 
   // pma tx side signals (RC_MODE)
-  bit [129:0] pma_tx_data[$];
-  bit [129:0] tx_data_q[$];
-  static int size_rx_tx;
+  bit [129:0] pma_tx_data[`PCIE_NUM_LANES][$];
+  bit [129:0] tx_data_q[`PCIE_NUM_LANES][$];
+  static int size_rx_tx[$];
 
   //-----------------------------------------------------------
   // DLL layer fields
@@ -72,6 +82,12 @@ class Sequence_item extends uvm_sequence_item;
   bit [31:0] dllp_packet_q [$];
   bit [31:0] dllp_packet_rx_q[$];
 
+  bit [31:0] tx_data_sb[$];
+  bit [31:0] rx_data_sb[$];
+
+  bit [31:0] rc_com_data_sb[$];
+  bit [31:0] ep_req_data_sb[$];
+
   // Flow-control credits exchanged via INITFC1/INITFC2 DLLPs
   bit [7:0]  fc_ph;
   bit [7:0]  fc_nph;
@@ -79,6 +95,45 @@ class Sequence_item extends uvm_sequence_item;
   bit [11:0] fc_pd;
   bit [11:0] fc_npd;
   bit [11:0] fc_cmpld;
+
+    bit [7:0]  rc_header_pfc;
+  bit [7:0]  rc_header_npfc;
+  bit [7:0]  rc_header_cmplfc;
+  bit [11:0] rc_data_pfc;
+  bit [11:0] rc_data_npfc;
+  bit [11:0] rc_data_cmplfc;
+
+bit [3:0] rc_data_type;
+
+    bit [7:0]  ep_header_pfc;
+  bit [7:0]  ep_header_npfc;
+  bit [7:0]  ep_header_cmplfc;
+  bit [11:0] ep_data_pfc;
+  bit [11:0] ep_data_npfc;
+  bit [11:0] ep_data_cmplfc;
+
+bit [3:0] ep_data_type;
+
+bit [7:0]  ep_fc_ph;
+  bit [7:0]  ep_fc_nph;
+  bit [7:0]  ep_fc_cmplh;
+  bit [11:0] ep_fc_pd;
+  bit [11:0] ep_fc_npd;
+  bit [11:0] ep_fc_cmpld;
+
+
+  bit [11:0] ep_ack_nak_seq;
+  bit [11:0] rc_ack_nak_seq;
+
+  
+  ///////////rc_mon///////
+  bit [7:0]  rc_ack_nack;
+  bit [11:0] rc_ack_nack_seq;
+  
+   ///////////ep_mon///////
+  bit [7:0]  ep_ack_nack;
+  bit [11:0] ep_ack_nack_seq;
+
 
   //-----------------------------------------------------------
   // MAC layer fields
@@ -108,6 +163,7 @@ class Sequence_item extends uvm_sequence_item;
   `uvm_field_int(fmt,        UVM_ALL_ON | UVM_DEC)
   `uvm_field_int(r_type,     UVM_ALL_ON | UVM_DEC)
   `uvm_field_int(tc,         UVM_ALL_ON | UVM_DEC)
+  `uvm_field_enum(vc_id_e, vc, UVM_ALL_ON)
   `uvm_field_int(attr_1,     UVM_ALL_ON | UVM_DEC)
   `uvm_field_int(th,         UVM_ALL_ON | UVM_DEC)
   `uvm_field_int(td,         UVM_ALL_ON | UVM_DEC)
@@ -140,6 +196,7 @@ class Sequence_item extends uvm_sequence_item;
   printer.print_field("r_type",     r_type,     5,  UVM_BIN);
   printer.print_field("R1",         R1,         1,  UVM_BIN);
   printer.print_field("tc",         tc,         3,  UVM_BIN);
+  printer.print_field("vc",         vc,         3,  UVM_DEC);
   printer.print_field("R2",         R2,         1,  UVM_BIN);
   printer.print_field("attr_1",     attr_1,     1,  UVM_BIN);
   printer.print_field("R3",         R3,         1,  UVM_BIN);
@@ -234,6 +291,8 @@ class Sequence_item extends uvm_sequence_item;
       printer.print_field("bcm",          bcm,           1, UVM_BIN);
       printer.print_field("byte_count",   byte_count,   10, UVM_DEC);
       printer.print_field("req_id",       req_id,       16, UVM_HEX);
+      printer.print_field("req_id",       req_id,       16, UVM_HEX);
+      printer.print_field("ep_req_id",    ep_req_id,    16, UVM_HEX);
       printer.print_field("tag",          tag,           8, UVM_HEX);
       printer.print_field("R6",           R6,            1, UVM_BIN);
       printer.print_field("lower_addr",   lower_addr,    7, UVM_HEX);
@@ -258,7 +317,7 @@ class Sequence_item extends uvm_sequence_item;
       printer.print_field("tag",        tag,         8, UVM_HEX);
       printer.print_field("last_BE",    last_BE,     4, UVM_BIN);
       printer.print_field("first_BE",   first_BE,    4, UVM_BIN);
-      printer.print_field("addr",       addr,        64, UVM_HEX);
+      printer.print_field("addr",       addr,       64,UVM_HEX);
 
     end
 
@@ -267,8 +326,18 @@ class Sequence_item extends uvm_sequence_item;
 endfunction
 
      
+  // Set by the sequence/driver before randomize(), from env_cfg.tc2vc_table.
+  // Declared static so every item defaults to identity mapping (tc==vc)
+  // until a test explicitly installs a different table.
+  static vc_id_e tc2vc_table[8] = '{VC0, VC1, VC2, VC3, VC4, VC5, VC6, VC7};
+
   function void post_randomize();
-    req_id     = {bus, device, function_n};
+    req_id    = {bus, device, function_n};
+    ep_req_id = {ep_bus, ep_device, ep_function_n};
+
+    // TC -> VC mapping (mirrors the VC Resource Control register's
+    // TC/VC mapping bits in real PCIe hardware)
+    vc = tc2vc_table[tc];
   endfunction
       
   constraint MEM_RD_CONSTRAINT {
@@ -280,19 +349,19 @@ endfunction
       if(e_fmt == FMT_3DW_NO_DATA) {
         
         fmt == 3'b000;
-        addr[63:32] == 0;
-        addr[31:2] inside {[32'h4 : 32'h100]};
+       // addr[63:32] == 0;
+       // addr[31:2] inside {[32'h4 : 32'h100]};
         
       }
         
         if(e_fmt == FMT_4DW_NO_DATA) {
           
           fmt == 3'b001;
-          addr[63:2] inside {[64'h4 : 64'h200]};
+         // addr[63:2] inside {[64'h4 : 64'h200]};
           
         }
           
-          length inside {[1:1024]};
+          //length inside {[1:10]};
           payload.size() == 0;
           first_BE inside {4'b0001,4'b0011,4'b0111,4'b1111,4'b1000,4'b1100,4'b1110};
           last_BE  inside {4'b0001,4'b0011,4'b0111,4'b1111,4'b1000,4'b1100,4'b1110};
@@ -308,15 +377,15 @@ endfunction
       if(e_fmt == FMT_3DW_DATA) {
         
         fmt         == 3'b010;
-        addr[63:32] == 0;
-        addr[31:2] inside {[32'h4 : 32'h100]};
+        //addr[63:32] == 0;
+        //addr[31:2] inside {[32'h4 : 32'h100]};
         
       }
         
         if(e_fmt == FMT_4DW_DATA) {
           
           fmt   == 3'b011;
-          addr[63:2] inside {[64'h4 : 64'h200]};
+          //addr[63:2] inside {[64'h4 : 64'h200]};
           
         }
           
@@ -328,7 +397,7 @@ endfunction
           last_BE  inside {4'b0001,4'b0011,4'b0111,4'b1111,4'b1000,4'b1100,4'b1110};
     }
   }
-      
+  
   constraint IO_RD_CONSTRAINT {
     
     if(e_type == IO_RD) {
@@ -337,13 +406,13 @@ endfunction
             
       e_fmt       == FMT_3DW_NO_DATA;
       fmt         == 3'b000;
-      addr[63:32] == 0;
-      addr[31:2] inside {[32'h4 : 32'h100]};
+      //addr[63:32] == 0;
+      //addr[31:2] inside {[32'h4 : 32'h100]};
         
         
         payload.size() == 0;
       
-        length == 1;
+        //length == 1;
       
         first_BE inside {4'b0001,4'b0011,4'b0111,4'b1111,4'b1000,4'b1100,4'b1110};
         
@@ -359,13 +428,13 @@ endfunction
           
       e_fmt       == FMT_3DW_DATA;
       fmt         == 3'b010;
-      addr[63:32] == 0;
-      addr[31:2] inside {[32'h4 : 32'h100]};
+      //addr[63:32] == 0;
+      //addr[31:2] inside {[32'h4 : 32'h100]};
         
         
       payload.size() == 1;
       
-        length == 1;
+       // length == 1;
       
         first_BE inside {4'b0001,4'b0011,4'b0111,4'b1111,4'b1000,4'b1100,4'b1110};
         
@@ -576,6 +645,30 @@ endfunction
   }
 
 
+  constraint PKT_TYPE_CONSTRAINT {
+
+  if (e_type inside {MEM_WR}) {
+    pkt_type == P;
+  }
+
+  if (e_type inside {MEM_RD,
+                     IO_RD,
+                     IO_WR,
+                     CFG_RD0,
+                     CFG_RD1,
+                     CFG_WR0,
+                     CFG_WR1}) {
+    pkt_type == NP;
+  }
+
+  if (e_type inside {CPL,
+                     CPL_DATA}) {
+    pkt_type == CMPL;
+  }
+
+}
+
+
     function void pack_tlp();
     
     bit [31:0] dw;
@@ -653,8 +746,12 @@ endfunction
       end
       
       CFG_RD0, CFG_WR0, CFG_RD1, CFG_WR1 : begin
+  	`uvm_info("SEQUENCE_ITEM", $sformatf("EP_BUS = %0d, EP_DEVICE = %0d, EP_FUNCTION = %0d", ep_bus, ep_device, ep_function_n), UVM_LOW)
         
-        dw = {bus, device, function_n, R5, ext_register_num, register_num, R4};
+	dw = {ep_bus, ep_device, ep_function_n, R5, ext_register_num, register_num, R4};
+	`uvm_info("PACK",
+$sformatf("PACK: reg_num=%0d ext_reg=%0d DW2=%08h",
+register_num, ext_register_num, dw), UVM_NONE)
         tlp_q.push_back(dw);
       
       end
@@ -725,3 +822,5 @@ endclass : Sequence_item
   
   
   	
+
+

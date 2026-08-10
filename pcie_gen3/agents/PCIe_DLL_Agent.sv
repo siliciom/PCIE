@@ -27,6 +27,8 @@ class PCIe_DLL_Agent extends uvm_agent;
     PCIe_DLL_Mon.rc_RX_MD_ap.connect(PCIe_DLL_Drv.rc_RX_MD_Recv);
     PCIe_DLL_Mon.ep_TX_MD_ap.connect(PCIe_DLL_Drv.ep_TX_MD_Recv);
     PCIe_DLL_Mon.ep_RX_MD_ap.connect(PCIe_DLL_Drv.ep_RX_MD_Recv);
+       PCIe_DLL_Mon.rc_FC_MD_ap.connect(PCIe_DLL_Drv.rc_FC_MD_Recv);
+    PCIe_DLL_Mon.ep_FC_MD_ap.connect(PCIe_DLL_Drv.ep_FC_MD_Recv);
   endfunction : connect_phase
     
 endclass : PCIe_DLL_Agent

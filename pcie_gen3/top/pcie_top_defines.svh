@@ -9,10 +9,14 @@
 `endif
 
 `ifndef NUM_RC_GEN
-  `define NUM_RC_GEN 3
+  `define NUM_RC_GEN 1
 `endif
 `ifndef NUM_EP_GEN
-  `define NUM_EP_GEN 3
+  `define NUM_EP_GEN 1
+`endif
+
+`ifndef NUM_LANES
+  `define NUM_LANES 1 
 `endif
 
 // Alias macros - single definition point
@@ -20,6 +24,8 @@
 `define PCIE_NUM_EP `NUM_EP
 `define PCIE_NUM_RC_GEN `NUM_RC_GEN
 `define PCIE_NUM_EP_GEN `NUM_EP_GEN
+`define PCIE_NUM_LANES `NUM_LANES
+
 
 `endif
 
@@ -80,4 +86,13 @@
     CMPL
 
   } packet_type_e;
+
+
+
+
+  typedef enum bit [2:0] {
+
+    VC0, VC1, VC2, VC3, VC4, VC5, VC6, VC7
+
+  } vc_id_e;
 

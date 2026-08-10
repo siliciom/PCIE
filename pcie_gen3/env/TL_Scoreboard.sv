@@ -29,11 +29,16 @@ class TL_Scoreboard extends uvm_component;
 
  
   function automatic bit is_completion(Sequence_item pkt);
-    return (pkt.e_type == CPL || pkt.e_type == CPL_DATA);
+    return (pkt.r_type == 5'b01010);
   endfunction
 
   
   function void write_tr(Sequence_item tx_pkt);
+
+    `uvm_info("TL_Scoreboard",
+      $sformatf("TX TL packet captured: %s fmt=%0b r_type=%0b length=%0d",
+        is_completion(tx_pkt) ? "CPL" : "REQ",
+        tx_pkt.fmt, tx_pkt.r_type, tx_pkt.length), UVM_LOW)
 
     if (is_completion(tx_pkt)) begin
       tx_cpl_q.push_back(tx_pkt);
@@ -70,6 +75,11 @@ class TL_Scoreboard extends uvm_component;
 
   
   function void write_rr(Sequence_item rx_pkt);
+
+    `uvm_info("TL_Scoreboard",
+      $sformatf("RX TL packet captured: %s fmt=%0b r_type=%0b length=%0d",
+        is_completion(rx_pkt) ? "CPL" : "REQ",
+        rx_pkt.fmt, rx_pkt.r_type, rx_pkt.length), UVM_LOW)
 
     if (is_completion(rx_pkt)) begin
       rx_cpl_q.push_back(rx_pkt);
@@ -114,24 +124,28 @@ class TL_Scoreboard extends uvm_component;
   
   task forward_requests();
     Sequence_item tx_pkt, rx_pkt;
-    `uvm_info("SB", "Waiting for REQ packets", UVM_LOW)
+    `uvm_info("SB", "Waiting for REQ packets", UVM_HIGH)
     forever begin
-	    `uvm_info("SB",$sformatf( "Waiting for REQ packets tx = %d, rx = %d",tx_req_q.size(),rx_req_q.size()), UVM_LOW)
+	    `uvm_info("SB",$sformatf( "Waiting for REQ packets tx = %d, rx = %d",tx_req_q.size(),rx_req_q.size()), UVM_HIGH)
       wait (tx_req_q.size() > 0 && rx_req_q.size() > 0);
       tx_pkt = tx_req_q.pop_front();
       rx_pkt = rx_req_q.pop_front();
+
+      `uvm_info("TL_Scoreboard",
+        $sformatf("Forwarding matched REQUEST pair to Scoreboard_Top: e_type=%s",
+          tx_pkt.e_type.name()), UVM_LOW)
 
       `uvm_info("TL_Scoreboard_REQ",
         $sformatf("TX REQ: fmt=%0b r_type=%0b addr=%0h length=%0d e_type=%s payload[0]=%0h",
           tx_pkt.fmt, tx_pkt.r_type, tx_pkt.addr,
           tx_pkt.length, tx_pkt.e_type.name(),
-          (tx_pkt.payload.size() > 0) ? tx_pkt.payload[0] : 0), UVM_LOW)
+          (tx_pkt.payload.size() > 0) ? tx_pkt.payload[0] : 0), UVM_HIGH)
 
       `uvm_info("TL_Scoreboard_REQ",
         $sformatf("RX REQ: fmt=%0b r_type=%0b addr=%0h length=%0d e_type=%s payload[0]=%0h",
           rx_pkt.fmt, rx_pkt.r_type, rx_pkt.addr,
           rx_pkt.length, rx_pkt.e_type.name(),
-          (rx_pkt.payload.size() > 0) ? rx_pkt.payload[0] : 0), UVM_LOW)
+          (rx_pkt.payload.size() > 0) ? rx_pkt.payload[0] : 0), UVM_HIGH)
 
       t_port.write(tx_pkt);
       r_port.write(rx_pkt);
@@ -146,17 +160,21 @@ class TL_Scoreboard extends uvm_component;
       tx_pkt = tx_cpl_q.pop_front();
       rx_pkt = rx_cpl_q.pop_front();
 
+      `uvm_info("TL_Scoreboard",
+        $sformatf("Forwarding matched COMPLETION pair to Scoreboard_Top: e_type=%s",
+          tx_pkt.e_type.name()), UVM_LOW)
+
       `uvm_info("TL_Scoreboard_CPL",
                 $sformatf("TX CPL: fmt=%0b r_type=%0b lower_addr=%0h length=%0d e_type=%s payload[0]=%0h",
           tx_pkt.fmt, tx_pkt.r_type, tx_pkt.lower_addr,
           tx_pkt.length, tx_pkt.e_type.name(),
-          (tx_pkt.payload.size() > 0) ? tx_pkt.payload[0] : 0), UVM_LOW)
+          (tx_pkt.payload.size() > 0) ? tx_pkt.payload[0] : 0), UVM_HIGH)
 
       `uvm_info("TL_Scoreboard_CPL",
                 $sformatf("RX CPL: fmt=%0b r_type=%0b lower_addr=%0h length=%0d e_type=%s payload[0]=%0h",
           rx_pkt.fmt, rx_pkt.r_type, rx_pkt.lower_addr,
           rx_pkt.length, rx_pkt.e_type.name(),
-          (rx_pkt.payload.size() > 0) ? rx_pkt.payload[0] : 0), UVM_LOW)
+          (rx_pkt.payload.size() > 0) ? rx_pkt.payload[0] : 0), UVM_HIGH)
 
       t_port.write(tx_pkt);
       r_port.write(rx_pkt);

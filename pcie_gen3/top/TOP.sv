@@ -2,6 +2,7 @@
 //   TOP MODULE                    //
 /////////////////////////////////////
 `timescale 1ns/100ps
+`include "pcie_top_defines.svh"
 `include "TX_TL_DL_Interface.sv"
 `include "RX_TL_DL_Interface.sv"
 `include "TX_DL_PCS_Interface.sv"
@@ -9,7 +10,6 @@
 `include "TX_Pipe_interface.sv"
 `include "RX_Pipe_interface.sv"
 `include "Phy_Interface.sv"
-`include "pcie_top_defines.svh"
  import uvm_pkg::*;
  `include "uvm_macros.svh"
 
@@ -93,8 +93,10 @@ module PCIe_top;
   // In this generate block tx to rx and rx to tx connected for one RC to EP
   generate
     for(genvar i = 0; i < NUM_PAIRED; i++) begin : g_phy_loopback
-      assign EP_PHY_RX[i].RX = RC_PHY_TX[i].TX;
-      assign RC_PHY_TX[i].RX = EP_PHY_RX[i].TX;
+      for(genvar l = 0; l < `PCIE_NUM_LANES; l++) begin : g_phy_loopback_lane
+        assign EP_PHY_RX[i].RX[l] = RC_PHY_TX[i].TX[l];
+        assign RC_PHY_TX[i].RX[l] = EP_PHY_RX[i].TX[l];
+      end
     end
   endgenerate
 
