@@ -10,6 +10,8 @@
 `include "TX_Pipe_interface.sv"
 `include "RX_Pipe_interface.sv"
 `include "Phy_Interface.sv"
+`include "apb_defines.svh"          
+`include "apb_interface.sv" 
  import uvm_pkg::*;
  `include "uvm_macros.svh"
 
@@ -57,6 +59,16 @@ module PCIe_top;
   RX_DLL_PCS_Interface  EP_RX_DLL_PCS  [NUM_EP] (CLK, RESET);
   pipe_rx_interface     EP_RX_PIPE     [NUM_EP] (EP_PCLK, RESET);
   phy_rx_interface      EP_PHY_RX      [NUM_EP] ();
+
+  // APB interface for RAL register access - ADDED
+  apb_interface EP_APB_If [NUM_EP] ();
+generate
+  for (genvar i = 0; i < NUM_EP; i++) begin : g_apb_clk_rst
+    assign EP_APB_If[i].PCLK    = CLK;
+    assign EP_APB_If[i].PRESETn = RESET;
+  end
+endgenerate
+
 
   //-------------------------------------------------------------
   // Per-instance PCLK mux - Rate is driven by PCIe_MAC_driver:
@@ -131,6 +143,10 @@ module PCIe_top;
         uvm_config_db#(virtual RX_DLL_PCS_Interface)::set(null, ep_name, "DLL_Vif", EP_RX_DLL_PCS[i]); //DL interface
         uvm_config_db#(virtual pipe_rx_interface)::set(null, ep_name, "pipe_Vif",  EP_RX_PIPE[i]); // Pipe interface
         uvm_config_db#(virtual phy_rx_interface)::set(null, ep_name, "phy_Vif",    EP_PHY_RX[i]);  // Phy interface
+	 // APB interface for RAL - ADDED
+        uvm_config_db#(virtual apb_interface)::set(null, ep_name, "mvif", EP_APB_If[i]);
+        uvm_config_db#(virtual apb_interface)::set(null, ep_name, "svif", EP_APB_If[i]);
+
       end
 
     end

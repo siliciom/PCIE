@@ -10,6 +10,6 @@ interface RX_DLL_PCS_Interface(input bit CLK, input bit RESET);
   logic        tl_packet;
   logic        dl_mac_packet;
   logic        tl_mac_packet;
-  logic        phy_link_up=1;
+  logic        ep_link_up;
  
 endinterface : RX_DLL_PCS_Interface

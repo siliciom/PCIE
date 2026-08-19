@@ -9,8 +9,20 @@ class FC_Manager extends uvm_component;
 
   `uvm_component_utils(FC_Manager)
 
+  // NEW: pulsed every time consume_credit()/return_credit() actually
+  // changes a counter. PCIe_TL_Driver's drive_tx_fc_thread/drive_rx_fc_thread
+  // block on this instead of blindly re-driving the interface every clock -
+  // this IS the "flag" that tells the DL layer a fresh (post-INITFC) credit
+  // update is available and an UPDATEFC DLLP needs to go out.
+  uvm_event fc_update_ev;
+
+  // Last VC that changed - purely informational/logging, mirrors what
+  // triggered fc_update_ev most recently.
+  vc_id_e last_updated_vc;
+
   function new(string name = "FC_Manager", uvm_component parent);
     super.new(name,parent);
+    fc_update_ev = new("fc_update_ev");
   endfunction
 
   localparam int PH_TOTAL   = 128;
@@ -22,26 +34,35 @@ class FC_Manager extends uvm_component;
   localparam int CPLD_TOTAL = 2048;
 
   // [8] => one pool per VC (VC0..VC7)
-  int ph_avail;
-  int nph_avail;
-  int cplh_avail;
+  reg [7:0][8] ph_avail;
+  reg [7:0][8] nph_avail;
+  reg [7:0][8] cplh_avail;
 
-  int pd_avail;
-  int npd_avail;
-  int cpld_avail;
+  reg [7:0][12] pd_avail;
+  reg [7:0][12] npd_avail;
+  reg [7:0][12] cpld_avail;
+
+  reg [7:0][8] ph_return = 0;
+  reg [7:0][8] nph_return = 0;
+  reg [7:0][8] cplh_return = 0;
+
+  reg [7:0][12] pd_return = 0;
+  reg [7:0][12] npd_return = 0;
+  reg [7:0][12] cpld_return = 0;
+
 
   function void build_phase(uvm_phase phase);
 
     super.build_phase(phase);
 
     foreach (ph_avail[v]) begin
-      ph_avail   = PH_TOTAL;
-      nph_avail  = NPH_TOTAL;
-      cplh_avail = CPLH_TOTAL;
+      ph_avail[v]   = PH_TOTAL;
+      nph_avail[v]  = NPH_TOTAL;
+      cplh_avail[v] = CPLH_TOTAL;
 
-      pd_avail   = PD_TOTAL;
-      npd_avail  = NPD_TOTAL;
-      cpld_avail = CPLD_TOTAL;
+      pd_avail[v]   = PD_TOTAL;
+      npd_avail[v]  = NPD_TOTAL;
+      cpld_avail[v] = CPLD_TOTAL;
     end
 
   endfunction
@@ -55,18 +76,18 @@ class FC_Manager extends uvm_component;
     case(pkt_type)
 
       P: begin
-        ph_avail -= header_credit;
-        pd_avail -= data_credit;
+        ph_avail[vc] -= header_credit;
+        pd_avail[vc] -= data_credit;
       end
 
       NP: begin
-        nph_avail -= header_credit;
-        npd_avail -= data_credit;
+        nph_avail[vc] -= header_credit;
+        npd_avail[vc] -= data_credit;
       end
 
       CMPL: begin
-        cplh_avail -= header_credit;
-        cpld_avail -= data_credit;
+        cplh_avail[vc] -= header_credit;
+        cpld_avail[vc] -= data_credit;
       end
 
     endcase
@@ -77,7 +98,12 @@ class FC_Manager extends uvm_component;
          header_credit,
          data_credit);
 
-    send_fc_update_consume(vc);
+    send_fc_update(vc);
+
+    // NEW: wake up whoever is waiting to push a fresh value onto the
+    // TL<->DL interface (see PCIe_TL_Driver::drive_tx/rx_fc_thread).
+    last_updated_vc = vc;
+    fc_update_ev.trigger();
 
   endfunction
 
@@ -87,11 +113,10 @@ class FC_Manager extends uvm_component;
     case(req.pkt_type)
 
       P : begin data_credit = (req.length + 3)/4; hdr_credit = 1; end
-
-      NP : if(req.e_type == MEM_RD) begin data_credit = (req.length + 3)/0; hdr_credit = 1; end
+      NP : if(req.e_type == MEM_RD) begin data_credit = 0; hdr_credit = 1; end
           else begin data_credit = (req.length + 3)/4; hdr_credit = 1; end
 
-	  CMPL: begin data_credit = (req.length + 3)/4; hdr_credit = 2; end
+	  CMPL: begin data_credit = (req.length + 3)/4; hdr_credit = 1; end
 
     endcase
 
@@ -103,36 +128,39 @@ class FC_Manager extends uvm_component;
     case(pkt_type)
 
        P: begin
-         ph_avail += header_credit;
-         pd_avail += data_credit;
+         ph_return[vc] += header_credit;
+         pd_return[vc] += data_credit;
        end
 
        NP: begin
-         nph_avail += header_credit;
-         npd_avail += data_credit;
+         nph_return[vc] += header_credit;
+         npd_return[vc] += data_credit;
        end
 
        CMPL: begin
-         cplh_avail += header_credit;
-         cpld_avail += data_credit;
+         cplh_return[vc] += header_credit;
+         cpld_return[vc] += data_credit;
        end
 
     endcase
 
-  // send_fc_update_release(vc);
-`uvm_info("FC_MANAGER", $sformatf("PH_AVAIL = %0d PD AVAIL = %0d NPH AVAIL = %0d NPD AVAIL =%0d CPLH_AVAIL = %0d CPLD AVAIL = %0d", ph_avail, pd_avail, nph_avail, npd_avail, cplh_avail, cpld_avail), UVM_LOW)
+   send_fc_update(vc);
+
+    // NEW: same wakeup as consume_credit() - a credit was just returned
+    // (buffer freed after LUT processing), so the advertised value going
+    // out to the link partner needs to be re-driven / re-advertised.
+    last_updated_vc = vc;
+    fc_update_ev.trigger();
+
+
+    $display("RETURN CREDIT: VC=%0d BEFORE_PH=%0d ADD_PH=%0d",
+         vc, ph_avail[vc], header_credit);
+
   endfunction
 
-  function void send_fc_update_consume(vc_id_e vc);
+  function void send_fc_update(vc_id_e vc);
 
-    $display("CONSUMED CREDITS VC%0d: PH=%0d PD=%0d NPH=%0d NPD=%0d CPLH=%0d CPLD=%0d",
-              vc, ph_avail[vc], pd_avail[vc], nph_avail[vc], npd_avail[vc], cplh_avail[vc], cpld_avail[vc]);
-
-  endfunction
-
-  function void send_fc_update_release(vc_id_e vc);
-
-    $display("RETURN CREDITS VC%0d: PH=%0d PD=%0d NPH=%0d NPD=%0d CPLH=%0d CPLD=%0d",
+    $display("VC%0d: PH=%0d PD=%0d NPH=%0d NPD=%0d CPLH=%0d CPLD=%0d",
               vc, ph_avail[vc], pd_avail[vc], nph_avail[vc], npd_avail[vc], cplh_avail[vc], cpld_avail[vc]);
 
   endfunction
@@ -149,18 +177,18 @@ class FC_Manager extends uvm_component;
     case(req.pkt_type)
 
         P: begin
-            hdr_avail  = ph_avail;
-            data_avail = pd_avail;
+            hdr_avail  = ph_avail[vc];
+            data_avail = pd_avail[vc];
         end
 
         NP: begin
-            hdr_avail  = nph_avail;
-            data_avail = npd_avail;
+            hdr_avail  = nph_avail[vc];
+            data_avail = npd_avail[vc];
         end
 
         CMPL: begin
-            hdr_avail  = cplh_avail;
-            data_avail = cpld_avail;
+            hdr_avail  = cplh_avail[vc];
+            data_avail = cpld_avail[vc];
         end
 
     endcase
@@ -180,4 +208,5 @@ class FC_Manager extends uvm_component;
 endfunction
 
 endclass : FC_Manager
+
 

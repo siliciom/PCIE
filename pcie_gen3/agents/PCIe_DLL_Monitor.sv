@@ -19,13 +19,22 @@ class PCIe_DLL_Monitor extends uvm_monitor;
   uvm_analysis_port #(Sequence_item) rc_TX_MD_ap;
 
    uvm_analysis_port #(Sequence_item) rc_FC_MD_ap;
+     uvm_analysis_port #(Sequence_item) rc_tx;  // scoreboard port
+  uvm_analysis_port #(Sequence_item) rc_rx;  // scoreboard port
+  uvm_analysis_port #(Sequence_item) ep_tx;  // scoreboard port
+  uvm_analysis_port #(Sequence_item) ep_rx;  // scoreboard port
+
+  uvm_analysis_port #(Sequence_item) rc_dllp_tx;
+  uvm_analysis_port #(Sequence_item) rc_dllp_rx;
+  uvm_analysis_port #(Sequence_item) ep_dllp_tx;
+  uvm_analysis_port #(Sequence_item) ep_dllp_rx;
 
   uvm_event rc_nack_ev;
   uvm_event rc_ack_ev;
 
   bit RC_NACK_SCHEDULED;
   
-  bit [11:0] RC_NRS = 2;
+  bit [11:0] RC_NRS = 0;
 
   //-----------------------------------------------------------
   // EP_MODE analysis ports -> TX_DLL_Driver's ep_RX_MD_Recv / ep_TX_MD_Recv
@@ -39,7 +48,7 @@ class PCIe_DLL_Monitor extends uvm_monitor;
 
   bit EP_NACK_SCHEDULED;
 
-  bit [11:0] EP_NRS = 2;
+  bit [11:0] EP_NRS = 0;
 
   //-----------------------------------------------------------
   // Shared global event - LCRC mismatch notification
@@ -54,6 +63,15 @@ class PCIe_DLL_Monitor extends uvm_monitor;
     rc_TX_MD_ap = new("rc_TX_MD_ap", this);
     ep_RX_MD_ap = new("ep_RX_MD_ap", this);
     ep_TX_MD_ap = new("ep_TX_MD_ap", this);
+        rc_tx = new("rc_tx", this);  //scoreboard
+    rc_rx = new("rc_rx", this);  //scoreboard
+    ep_tx = new("ep_tx", this);  //scoreboard
+    ep_rx = new("ep_rx", this);  //scoreboard
+    rc_dllp_tx = new("rc_dllp_tx", this);
+    rc_dllp_rx = new("rc_dllp_rx", this);
+    ep_dllp_tx = new("ep_dllp_tx", this);
+    ep_dllp_rx = new("ep_dllp_rx", this);
+
 
     rc_FC_MD_ap = new("rc_FC_MD_ap", this);
     ep_FC_MD_ap = new("ep_FC_MD_ap", this);
@@ -78,7 +96,6 @@ class PCIe_DLL_Monitor extends uvm_monitor;
 
         if(!uvm_config_db#(virtual TX_DLL_PCS_Interface)::get(this, "", "DLL_Vif", TX_DLL_PCS))
           `uvm_fatal("PCIe_DLL_Monitor", $sformatf("[%s] Unable to access TX_DLL_PCS from config_db", tag))
-
         end
 
       EP_MODE: begin
@@ -102,50 +119,76 @@ class PCIe_DLL_Monitor extends uvm_monitor;
   //-----------------------------------------------------------
   // Shared helper - byte-identical across all 4 reference files
   //-----------------------------------------------------------
-  function bit [31:0] rc_calculate_lcrc(input bit [31:0] pkt_q[$]);
+ function bit [31:0] rc_calculate_lcrc(input bit [31:0] pkt_q[$]);
     bit [31:0] crc;
+      bit [31:0] lcrc;
     bit data_bit;
     bit feedback;
+       
     crc = 32'hFFFF_FFFF;
     foreach(pkt_q[i]) begin
       for(int b = 0; b < 32; b++) begin
         data_bit = pkt_q[i][b];
-        feedback = crc[31] ^ data_bit;
-        crc = crc << 1;
+        feedback = crc[0] ^ data_bit;
+        crc = crc >> 1;
         if(feedback)
-          crc ^= 32'h04C11DB7;
+           crc ^= 32'hEDB8_8320;// Standard Polynomial - 04C11DB7
+
       end
     end
-    crc = ~crc;
-    return crc;
-  endfunction
+   crc = ~crc;
 
-   function bit [31:0] ep_calculate_lcrc(input bit [31:0] pkt_q[$]);
+     for (int byte_num = 0; byte_num < 4; byte_num++) begin
+
+       for (int bit_num = 0; bit_num < 8; bit_num++) begin
+
+         lcrc[byte_num*8 + bit_num] = crc[byte_num*8 + (7-bit_num)];
+
+       end
+
+     end
+
+     return lcrc;
+  endfunction : rc_calculate_lcrc
+  
+    function bit [31:0] ep_calculate_lcrc(input bit [31:0] pkt_q[$]);
     bit [31:0] crc;
+    bit [31:0] lcrc;    
     bit data_bit;
     bit feedback;
-    foreach(pkt_q[i]) begin
-                end
+
     crc = 32'hFFFF_FFFF;
     foreach(pkt_q[i]) begin
       for(int b = 0; b < 32; b++) begin
         data_bit = pkt_q[i][b];
-        feedback = crc[31] ^ data_bit;
-        crc = crc << 1;
+        feedback = crc[0] ^ data_bit;
+        crc = crc >> 1;
         if(feedback)
-          crc ^= 32'h04C11DB7;
+         crc ^= 32'hEDB8_8320;// Standard Polynomial - 04C11DB7
       end
     end
-    crc = ~crc;
-    return crc;
-  endfunction
+     crc = ~crc;
 
-    function bit [15:0] crc16
+    for (int byte_num = 0; byte_num < 4; byte_num++) begin
+
+       for (int bit_num = 0; bit_num < 8; bit_num++) begin
+
+         lcrc[byte_num*8 + bit_num] = crc[byte_num*8 + (7-bit_num)];
+
+       end
+
+     end
+
+     return lcrc;
+  endfunction : ep_calculate_lcrc
+
+   function bit [15:0] crc16
 (
   input bit [31:0] data
 );
 
   bit [15:0] crc;
+    bit [15:0] crc_16;
   bit feedback;
 
   crc = 16'hFFFF;  // Initial value
@@ -159,8 +202,19 @@ class PCIe_DLL_Monitor extends uvm_monitor;
       crc ^= 16'h100B;
   end
 
-  return ~crc;
+  crc = ~crc;
 
+  for (int byte_num = 0; byte_num < 2; byte_num++) begin
+
+       for (int bit_num = 0; bit_num < 8; bit_num++) begin
+
+         crc_16[byte_num*8 + bit_num] = crc[byte_num*8 + (7-bit_num)];
+
+       end
+
+     end
+
+  return crc_16;
 endfunction
 
   //-----------------------------------------------------------
@@ -249,11 +303,21 @@ Sequence_item rx_pkt;
       rc_collect_request(tx_pkt);
 
       if (tx_pkt.tx_data_sb.size() > 0) begin
-      //  rc_RX_MD_ap.write(tx_pkt);
+            rc_tx.write(tx_pkt);
 
               end
 
     end
+        if (TX_DLL_PCS.dl_packet) begin
+
+      rc_collect_dllp_sb(tx_pkt);
+
+      if (tx_pkt.rc_dllp_packet_sb.size() > 0) begin
+      //  rc_RX_MD_ap.write(tx_pkt);
+      end
+
+    end
+
 
     end
 
@@ -281,10 +345,8 @@ task rc_monitor_fc_credits();
       fc_pkt.fc_npd   = TX_TL_DL.fc_npd;
       fc_pkt.fc_cmplh = TX_TL_DL.fc_cmplh;
       fc_pkt.fc_cmpld = TX_TL_DL.fc_cmpld;
-
       rc_FC_MD_ap.write(fc_pkt);
-
-  end
+       end
 
 endtask
 
@@ -315,10 +377,7 @@ task rc_collect_data_TX(Sequence_item t_x);
   wait(TX_TL_DL.tl_tx_valid &&
        TX_TL_DL.tl_tx_ready);
 
-  ////////////////////////////////////////////////////
-  // HEADER DW0
-  ////////////////////////////////////////////////////
-
+ 
   header[0] = TX_TL_DL.tl_tx_data;
 
   ////////////////////////////////////////////////////
@@ -419,13 +478,6 @@ task rc_collect_data_TX(Sequence_item t_x);
   if(td_bit)
     t_x.tx_data_t.push_back(ecrc);
 
-  ////////////////////////////////////////////////////
-  // Final Packet Dump
-  ////////////////////////////////////////////////////
-
-   foreach(t_x.tx_data_t[i]) begin
-
-  end
 
 endtask
 
@@ -445,7 +497,8 @@ task rc_collect_dllp(Sequence_item r_x);
         TX_DLL_PCS.dl_rx_ready)
       
       header[0] = TX_DLL_PCS.dl_rx_data;
-      
+       r_x.rc_dllp_data_sb.push_back(header[0]);
+
       `uvm_info("RX_PKT", $sformatf("RC: Received DATA on TX_DLL_PCS.dl_rx_data = %08h", header[0]), UVM_LOW)
       crc_pkt_q = header[0];
                   
@@ -455,7 +508,10 @@ task rc_collect_dllp(Sequence_item r_x);
         TX_DLL_PCS.dl_rx_ready)
       
       header[1] = TX_DLL_PCS.dl_rx_data;
-      
+       r_x.rc_dllp_data_sb.push_back(header[1]);
+
+        ///////WRITE///////
+       rc_dllp_rx.write(r_x);  
       `uvm_info("RX_PKT", $sformatf("RC: Received DATA on TX_DLL_PCS.dl_rx_data = %08h", header[1]), UVM_LOW)
       crc  = header[1][31:16];
             
@@ -470,24 +526,56 @@ task rc_collect_dllp(Sequence_item r_x);
               r_x.dllp_packet_q.push_back(crc_pkt_q);
         
               r_x.dllp_packet_q.push_back(crc);
-	      	      	      if(header[0][7:4]==4'b0100)begin
-	              r_x.rc_data_type   = header[0][7:4];
-		      r_x.rc_header_pfc = header[0][17:10];
-		      r_x.rc_data_pfc   = header[0][31:20];
-		              	      end 
-	   	      if(header[0][7:4]==4'b0101)begin
-		      r_x.rc_data_type   = header[0][7:4];	
-		      r_x.rc_header_npfc = header[0][17:10];
-		      r_x.rc_data_npfc   = header[0][31:20];
+	      	      	     if(header[0][7:4] == 4'b0100 || header[0][7:4] == 4'b1000) begin
 
-	      end 
-	   	      if(header[0][7:4]==4'b0110)begin
-		      r_x.rc_data_type   = header[0][7:4];	
-		      r_x.rc_header_cmplfc = header[0][17:10];
-		      r_x.rc_data_cmplfc   = header[0][31:20];
+  r_x.rc_data_type    = header[0][7:4];
+  r_x.rc_dllp_vc      = header[0][2:0];
+  r_x.rc_header_pfc   = header[0][17:10];
+  r_x.rc_data_pfc     = header[0][31:20];
 
-	      end 
+  `uvm_info("RC_FC",
+            $sformatf("RC P FC DLLP: Type=%04b, VC=%0h, Header FC=%0h, Data FC=%0h",
+                      r_x.rc_data_type,
+                      r_x.rc_dllp_vc,
+                      r_x.rc_header_pfc,
+                      r_x.rc_data_pfc),
+            UVM_LOW)
 
+end
+
+if(header[0][7:4] == 4'b0101 || header[0][7:4] == 4'b1001) begin
+
+  r_x.rc_data_type     = header[0][7:4];
+  r_x.rc_dllp_vc       = header[0][2:0];
+  r_x.rc_header_npfc   = header[0][17:10];
+  r_x.rc_data_npfc     = header[0][31:20];
+
+  `uvm_info("RC_FC",
+            $sformatf("RC NP FC DLLP: Type=%04b, VC=%0h, Header FC=%0h, Data FC=%0h",
+                      r_x.rc_data_type,
+                      r_x.rc_dllp_vc,
+                      r_x.rc_header_npfc,
+                      r_x.rc_data_npfc),
+            UVM_LOW)
+
+end
+
+if(header[0][7:4] == 4'b0110 || header[0][7:4] == 4'b1010) begin
+
+  r_x.rc_data_type       = header[0][7:4];
+  r_x.rc_dllp_vc         = header[0][2:0];
+  r_x.rc_header_cmplfc   = header[0][17:10];
+  r_x.rc_data_cmplfc     = header[0][31:20];
+
+  `uvm_info("RC_FC",
+            $sformatf("RC CPL FC DLLP: Type=%04b, VC=%0h, Header FC=%0h, Data FC=%0h",
+                      r_x.rc_data_type,
+                      r_x.rc_dllp_vc,
+                      r_x.rc_header_cmplfc,
+                      r_x.rc_data_cmplfc),
+            UVM_LOW)
+
+end
         if(header[0][31:24]==8'b0000_0000 || header[0][31:24]== 8'b0001_0000) begin
           r_x.rc_ack_nack = header[0][31:24];
             
@@ -673,7 +761,7 @@ do begin
    r_x.rc_com_data_sb.push_back(lcrc);
   
 /////////////////////////////call_write_for_SB/////////////////////
- //  rc_RX_MD_ap.write(tx_pkt);
+   rc_rx.write(r_x);
 
     //   
   calc_lcrc = rc_calculate_lcrc(lcrc_pkt_q);
@@ -728,6 +816,7 @@ do begin
         rc_ack_ev.trigger();
     
     r_x.rc_ack_nak_seq = seq_no;
+    RC_NACK_SCHEDULED = 0;
 
   end
     else if(seq_no > RC_NRS)
@@ -735,9 +824,12 @@ do begin
     	      if(RC_NACK_SCHEDULED == 0) begin
 	      
     rc_nack_ev.trigger();
-    
+    if(RC_NRS == 0) begin
+     r_x.rc_ack_nak_seq = 4095;
+     end
+    else begin
     r_x.rc_ack_nak_seq = RC_NRS-1;
-
+    end
     RC_NACK_SCHEDULED = 1;
     
     end
@@ -754,7 +846,12 @@ do begin
 
     rc_nack_ev.trigger();
 
-     r_x.rc_ack_nak_seq = RC_NRS-1;
+    if(RC_NRS == 0) begin
+     r_x.rc_ack_nak_seq = 4095;
+     end
+    else begin
+    r_x.rc_ack_nak_seq = RC_NRS-1;
+    end
 
     RC_NACK_SCHEDULED = 1;
      
@@ -929,6 +1026,37 @@ task rc_collect_request(Sequence_item t_x);
   end
 
 endtask
+task rc_collect_dllp_sb(Sequence_item t_x);
+    bit [31:0] header [2];
+    bit [31:0] crc_pkt_q;
+
+
+  t_x.rc_dllp_packet_sb.delete();
+
+    while (TX_DLL_PCS.dl_packet) begin
+
+    wait (TX_DLL_PCS.dl_tx_valid &&
+        TX_DLL_PCS.dl_tx_ready)
+      
+      header[0] = TX_DLL_PCS.dl_tx_data;
+   //   t_x.rc_dllp_packet_sb.push_back(header[0]); 
+    @(negedge TX_DLL_PCS.CLK);
+      
+          wait (TX_DLL_PCS.dl_tx_valid &&
+        TX_DLL_PCS.dl_tx_ready)
+      
+      header[1] = TX_DLL_PCS.dl_tx_data;
+@(negedge TX_DLL_PCS.CLK);
+
+      t_x.rc_dllp_packet_sb.push_back(header[0]); 
+      t_x.rc_dllp_packet_sb.push_back(header[1]);   
+      rc_dllp_tx.write(t_x);   
+
+`uvm_info("RC_DLLP_RX", $sformatf("RC Received DLLP Packet = {%08h, %08h}", header[1], header[0]), UVM_LOW)			
+  end
+
+endtask
+
 
   //-----------------------------------------------------------
   // EP_MODE tasks - preserved exactly as RX_DLL_Monitor.sv
@@ -1017,6 +1145,17 @@ task ep_monitor_rx();
       ep_collect_completion(tx_pkt);
 
       if (tx_pkt.rx_data_sb.size() > 0) begin
+	       ep_tx.write(tx_pkt);
+
+              end
+
+    end
+     else if (RX_DLL_PCS.dl_packet) begin
+
+      ep_collect_dllp_sb(tx_pkt);
+
+      if (tx_pkt.ep_dllp_packet_sb.size() > 0) begin
+
       //  rc_RX_MD_ap.write(tx_pkt);
 
               end
@@ -1043,9 +1182,30 @@ task ep_monitor_rx();
   fc_pkt.ep_fc_pd    = RX_TL_DL.fc_pd;
   fc_pkt.ep_fc_npd   = RX_TL_DL.fc_npd;
   fc_pkt.ep_fc_cmpld = RX_TL_DL.fc_cmpld;
-
-//      
+      
       ep_FC_MD_ap.write(fc_pkt);
+
+      if( RX_TL_DL.ep_fc_update_valid) begin
+  fc_pkt.ep_updated_credits = 1 ; 
+  fc_pkt.ep_fc_ph    = RX_TL_DL.fc_ph;
+  fc_pkt.ep_fc_nph   = RX_TL_DL.fc_nph;
+  fc_pkt.ep_fc_cmplh = RX_TL_DL.fc_cmplh;
+
+  fc_pkt.ep_fc_pd    = RX_TL_DL.fc_pd;
+  fc_pkt.ep_fc_npd   = RX_TL_DL.fc_npd;
+  fc_pkt.ep_fc_cmpld = RX_TL_DL.fc_cmpld;
+  `uvm_info("EP_FC_UPDATE",
+            $sformatf("EP FC Update: PH=%0h, NPH=%0h, CPLH=%0h, PD=%0h, NPD=%0h, CPLD=%0h",
+                      RX_TL_DL.fc_ph,
+                      RX_TL_DL.fc_nph,
+                      RX_TL_DL.fc_cmplh,
+                      RX_TL_DL.fc_pd,
+                      RX_TL_DL.fc_npd,
+                      RX_TL_DL.fc_cmpld),
+            UVM_LOW)
+	    ep_FC_MD_ap.write(fc_pkt);
+	    fc_pkt.ep_updated_credits = 0 ; 
+  end
 
      end 
 
@@ -1211,6 +1371,8 @@ task ep_collect_dllp(Sequence_item r_x);
         RX_DLL_PCS.dl_rx_ready)
       
        header[0] = RX_DLL_PCS.dl_rx_data;
+        r_x.ep_dllp_data_sb.push_back(header[0]);
+
       
        `uvm_info("RX_PKT", $sformatf("EP: Received DATA on RX_DLL_PCS.dl_rx_data = %08h", header[0]), UVM_LOW)
       crc_pkt_q = header[0];
@@ -1221,7 +1383,9 @@ task ep_collect_dllp(Sequence_item r_x);
           RX_DLL_PCS.dl_rx_ready);
       
        header[1] = RX_DLL_PCS.dl_rx_data;
-      
+         r_x.ep_dllp_data_sb.push_back(header[1]);
+       ///////WRITE////////
+        ep_dllp_rx.write(r_x);  
        `uvm_info("RX_PKT", $sformatf("EP: Received DATA on RX_DLL_PCS.dl_rx_data = %08h", header[1]), UVM_LOW)
       crc  = header[1][31:16];
        
@@ -1233,25 +1397,45 @@ task ep_collect_dllp(Sequence_item r_x);
               r_x.dllp_packet_rx_q.push_back(crc_pkt_q);
         
               r_x.dllp_packet_rx_q.push_back(crc);
-	       if(header[0][7:4]==4'b0100)begin
+	       if(header[0][7:4]==4'b0100 || header[0][7:4]==4'b1000)begin
 		      r_x.ep_data_type = header[0][7:4];
+		      r_x.ep_dllp_vc   = header[0][2:0];
 		      r_x.ep_header_pfc = header[0][17:10];
 		      r_x.ep_data_pfc   = header[0][31:20];
-
+  `uvm_info("EP_FC",
+            $sformatf("EP P FC DLLP: Type=%0b, VC=%0h, Header FC=%0h, Data FC=%0h",
+                      r_x.ep_data_type,
+                      r_x.ep_dllp_vc,
+                      r_x.ep_header_pfc,
+                      r_x.ep_data_pfc),
+            UVM_LOW)
 	      end 
-	   	      if(header[0][7:4]==4'b0101)begin
+	   	      if(header[0][7:4]==4'b0101 || header[0][7:4]==4'b1001)begin
 			      r_x.ep_data_type = header[0][7:4];
-
-		      r_x.ep_header_npfc = header[0][17:10];
-		      r_x.ep_data_npfc   = header[0][31:20];
-		       
+			      r_x.ep_dllp_vc   = header[0][2:0];
+                              r_x.ep_header_npfc = header[0][17:10];
+		            r_x.ep_data_npfc   = header[0][31:20];
+  `uvm_info("EP_FC",
+            $sformatf("EP NP FC DLLP: Type=%0b, VC=%0h, Header FC=%0h, Data FC=%0h",
+                      r_x.ep_data_type,
+                      r_x.ep_dllp_vc,
+                      r_x.ep_header_npfc,
+                      r_x.ep_data_npfc),
+            UVM_LOW)		       
 	      end 
-	      if(header[0][7:4]==4'b0110)begin
+	      if(header[0][7:4]==4'b0110 || header[0][7:4]==4'b1010)begin
 		      r_x.ep_data_type = header[0][7:4];
+		      r_x.ep_dllp_vc   = header[0][2:0];
 
 		      r_x.ep_header_cmplfc = header[0][17:10];
 		      r_x.ep_data_cmplfc   = header[0][31:20];
-		       
+		  `uvm_info("EP_FC",
+            $sformatf("EP CPL FC DLLP: Type=%0b, VC=%0h, Header FC=%0h, Data FC=%0h",
+                      r_x.ep_data_type,
+                      r_x.ep_dllp_vc,
+                      r_x.ep_header_cmplfc,
+                      r_x.ep_data_cmplfc),
+            UVM_LOW)       
 	      end    
 
         if(header[0][31:24]==8'b0000_0000 || header[0][31:24]== 8'b0001_0000) begin
@@ -1418,10 +1602,7 @@ task ep_collect_tlp(Sequence_item r_x);
     lcrc_pkt_q.push_back(ecrc);
    r_x.ep_req_data_sb.push_back(ecrc);
 
-      foreach(lcrc_pkt_q[i]) begin
-
-            end
-
+  
   end
 
   ////////////////////////////////////////////////////////////
@@ -1439,7 +1620,7 @@ task ep_collect_tlp(Sequence_item r_x);
   `uvm_info("RX_PKT", $sformatf("EP: Received DATA on RX_DLL_PCS.dl_rx_data = %08h", lcrc), UVM_LOW)
   r_x.ep_req_data_sb.push_back(lcrc);
 
- // ep_RX_MD_ap.write(r_x); //////////SENDING_SB/////////
+  ep_rx.write(r_x); //////////SENDING_SB/////////
 
   
   calc_lcrc = ep_calculate_lcrc(lcrc_pkt_q);
@@ -1494,6 +1675,7 @@ if(seq_no == EP_NRS)
          ep_ack_ev.trigger();
     
     r_x.ep_ack_nak_seq = seq_no;
+     EP_NACK_SCHEDULED = 0;
 
   end
     else if(seq_no > EP_NRS)
@@ -1501,8 +1683,12 @@ if(seq_no == EP_NRS)
      	      if(EP_NACK_SCHEDULED == 0) begin
 	      
     ep_nack_ev.trigger();
-    
+    if(EP_NRS==0) begin
+	        r_x.ep_ack_nak_seq = 4095;
+    end
+    else begin
     r_x.ep_ack_nak_seq = EP_NRS-1;
+    end
     EP_NACK_SCHEDULED = 1;
 
   end
@@ -1522,7 +1708,12 @@ if(seq_no == EP_NRS)
     
     EP_NACK_SCHEDULED = 1;
 
-        r_x.ep_ack_nak_seq = EP_NRS-1;
+         if(EP_NRS==0) begin
+	        r_x.ep_ack_nak_seq = 4095;
+    end
+    else begin
+    r_x.ep_ack_nak_seq = EP_NRS-1;
+    end
                end
 
   end
@@ -1690,12 +1881,40 @@ task ep_collect_completion(Sequence_item t_x);
       t_x.rx_data_sb.push_back(lcrc);
 
     
-   foreach(t_x.rx_data_sb[i]) begin
-
-  end
-  end
+     end
 
 endtask
+task ep_collect_dllp_sb(Sequence_item t_x);
+    bit [31:0] header [2];
+    bit [31:0] crc_pkt_q;
+
+
+  t_x.ep_dllp_packet_sb.delete();
+
+    while (RX_DLL_PCS.dl_packet) begin
+
+    wait (RX_DLL_PCS.dl_tx_valid &&
+          RX_DLL_PCS.dl_tx_ready)
+      
+      header[0] = RX_DLL_PCS.dl_tx_data;
+    @(negedge RX_DLL_PCS.CLK);
+      
+          wait (RX_DLL_PCS.dl_tx_valid &&
+        RX_DLL_PCS.dl_tx_ready)
+      
+      header[1] = RX_DLL_PCS.dl_tx_data;
+@(negedge RX_DLL_PCS.CLK);
+
+      t_x.ep_dllp_packet_sb.push_back(header[0]); 
+      t_x.ep_dllp_packet_sb.push_back(header[1]);   
+ ep_dllp_tx.write(t_x); 
+`uvm_info("RC_DLLP_RX", $sformatf("EP Received DLLP Packet = {%08h, %08h}", header[1], header[0]), UVM_LOW)			
+  end
+
+
+
+endtask
+
 
   //-----------------------------------------------------------
   // run_phase - dispatches to the correct role's monitor threads
@@ -1734,5 +1953,6 @@ endtask
   endtask
 
 endclass : PCIe_DLL_Monitor
+
 
 

@@ -10,6 +10,6 @@ interface TX_DLL_PCS_Interface(input bit CLK, input bit RESET);
   logic        tl_packet;  
   logic        dl_mac_packet;
   logic        tl_mac_packet;
-  logic        phy_link_up=1;
+  logic        rc_link_up;
 
 endinterface : TX_DLL_PCS_Interface

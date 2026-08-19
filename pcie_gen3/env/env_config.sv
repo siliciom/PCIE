@@ -34,10 +34,35 @@ class env_cfg extends uvm_object;
   time detect_retry_timeout   = 12ms;    // Wait before re-running detection on partial-lane mismatch
   time polling_active_timeout = 5ms;    // Polling.Active overall watchdog (spec: 24ms)
   time polling_configuration_timeout = 12ms;
-  // Link Control 2 register, bit 4 (Enter Compliance). Not modeled
-  // as a real register yet - flip this directly from a test/sequence
-  // to force immediate/mid-state transition to Polling.Compliance.
+  time config_linknum_start_timeout  = 5ms;    // spec: 24ms
+  time config_linknum_accept_timeout = 1ms;    // spec: 2ms
+  time config_lanenum_wait_timeout   = 1ms;    // spec: 2ms
+  time config_lanenum_accept_timeout = 1ms;    // spec: 2ms (unconfirmed bound - see note above)
+  time config_complete_timeout       = 1ms;    // spec: 2ms
+  time config_idle_timeout           = 1ms;    // spec: min 2ms
+  //-----------------------------------------------------------
+
+  time recovery_rcvrlock_timeout     = 5ms;    // spec: 24ms
+  time recovery_speed_timeout        = 8ms;    // spec: 48ms
+  time recovery_rcvrcfg_timeout      = 8ms;    // spec: 48ms
+  time recovery_idle_timeout         = 1ms;    // spec: 2ms
+  time recovery_speed_settle_time    = 800ns;
   bit link_ctrl2_enter_compliance = 1'b0;
+  bit link_ctrl_disable_link = 1'b0;
+
+  int unsigned disabled_ts1_count = 16;   // spec: 16 to 32 TS1s sent with Disable Link asserted
+
+  bit          link_ctrl_enter_loopback   = 1'b0;
+  bit          loopback_exit_directed     = 1'b0;
+  int unsigned loopback_entry_ts1_count   = 16;   // spec: master TS1 burst in Entry
+  time         loopback_entry_timeout     = 5ms;  // spec: <100ms implementation-specific bound
+  time         loopback_active_timeout    = 5ms;  // bound while waiting for directed exit
+  time         loopback_exit_idle_time    = 2ms;  // spec: 2ms Electrical Idle in Exit
+
+  bit          link_ctrl_hot_reset       = 1'b0;
+  bit          hot_reset_remain_directed = 1'b0;
+  int unsigned hot_reset_ts1_count       = 16;
+  time         hot_reset_timeout         = 2ms;  
   rand vc_id_e tc2vc_table[8];
 
   function new(string name="env_cfg");

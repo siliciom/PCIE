@@ -29,7 +29,7 @@ class TL_Scoreboard extends uvm_component;
 
  
   function automatic bit is_completion(Sequence_item pkt);
-    return (pkt.r_type == 5'b01010);
+    return (pkt.e_type == CPL || pkt.e_type == CPL_DATA);
   endfunction
 
   

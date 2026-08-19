@@ -30,6 +30,13 @@ class PCIe_TL_Monitor extends uvm_monitor;
   string  tag;
 
   //-----------------------------------------------------------
+  //  Static Sequence item queue to collect the packets from TL
+  //  TX Monitor
+  //-----------------------------------------------------------
+  
+  static Sequence_item cpl_q[$];
+  
+  //-----------------------------------------------------------
   // Role-specific interface handles
   //-----------------------------------------------------------
   virtual TX_TL_DL_Interface TX_TL_DL;   // RC_MODE
@@ -62,7 +69,7 @@ class PCIe_TL_Monitor extends uvm_monitor;
       `uvm_fatal("TX_TL_Monitor", $sformatf("env_cfg not found for %s", get_full_name()))
 
     tag = get_full_name();
-    `uvm_info("TX_TL_Monitor", $sformatf("[%s] Configured: mode=%s", tag, cfg.mode.name()), UVM_HIGH)
+    `uvm_info("TX_TL_Monitor", $sformatf("[%s] Configured: mode=%s", tag, cfg.mode.name()), UVM_LOW)
 
     case(cfg.mode)
 
@@ -70,14 +77,14 @@ class PCIe_TL_Monitor extends uvm_monitor;
         if(!uvm_config_db#(virtual TX_TL_DL_Interface)::get(this, "", "TL_Vif", TX_TL_DL))
           `uvm_fatal("TX_TL_Monitor", $sformatf("[%s] Unable to access TX_TL_DL interface", tag))
         else
-          `uvm_info("TX_TL_Monitor", $sformatf("[%s] Successfully accessed interface", tag), UVM_HIGH)
+          `uvm_info("TX_TL_Monitor", $sformatf("[%s] Successfully accessed interface", tag), UVM_LOW)
       end
 
       EP_MODE: begin
         if(!uvm_config_db#(virtual RX_TL_DL_Interface)::get(this, "", "TL_Vif", RX_TL_DL))
           `uvm_fatal("RX_TL_MONITOR", $sformatf("[%s] Unable to access RX TL interface", tag))
          else
-          `uvm_info("RX_TL_Monitor", $sformatf("[%s] Successfully accessed interface", tag), UVM_HIGH)
+          `uvm_info("RX_TL_Monitor", $sformatf("[%s] Successfully accessed interface", tag), UVM_LOW)
       end
 
       default: `uvm_fatal("TX_TL_Monitor", $sformatf("[%s] Unknown mode", tag))
@@ -93,7 +100,7 @@ class PCIe_TL_Monitor extends uvm_monitor;
 
       RC_MODE: begin
         TX_TL_DL.tl_rx_ready = 1;
-    `uvm_info("RX_TL_MONITOR", $sformatf("RC MODE TL MONITOR"), UVM_HIGH)
+    `uvm_info("RX_TL_MONITOR", $sformatf("RC MODE TL MONITOR"), UVM_LOW)
         fork
           // Thread 1 - forever collect TX requests (RC sending to EP)
 	 begin
@@ -116,7 +123,7 @@ class PCIe_TL_Monitor extends uvm_monitor;
 
       EP_MODE: begin
         RX_TL_DL.tl_rx_ready = 1;
-    `uvm_info("RX_TL_MONITOR", $sformatf("EP MODE TL MONITOR"), UVM_HIGH)
+    `uvm_info("RX_TL_MONITOR", $sformatf("EP MODE TL MONITOR"), UVM_LOW)
         fork
           // Thread 1 - forever collect RX requests arriving at EP
           forever begin
@@ -153,12 +160,12 @@ class PCIe_TL_Monitor extends uvm_monitor;
       @(negedge TX_TL_DL.CLK);
     wait(TX_TL_DL.tl_tx_valid);
     ////////////////////////////// HEADER DW0 //////////////////////////////
-    `uvm_info("RC_TL_MONITOR", $sformatf("RC MODE TL MONITOR inside TX_request"), UVM_HIGH)
+    `uvm_info("RC_TL_MONITOR", $sformatf("RC MODE TL MONITOR inside TX_request"), UVM_LOW)
       do begin
         @(negedge TX_TL_DL.CLK);
       end while(!(TX_TL_DL.tl_tx_valid && TX_TL_DL.tl_tx_ready));
 
-    `uvm_info("RC_TL_MONITOR", $sformatf("RC MODE TL MONITOR DATA COLLECT"), UVM_HIGH)
+    `uvm_info("RC_TL_MONITOR", $sformatf("RC MODE TL MONITOR DATA COLLECT"), UVM_LOW)
     dw = TX_TL_DL.tl_tx_data;
 
     t_x.tlp_q.delete();
@@ -168,6 +175,41 @@ class PCIe_TL_Monitor extends uvm_monitor;
     t_x.r_type = dw[28:24];
     t_x.length = dw[9:0];
     t_x.td     = dw[15];
+     case(t_x.r_type)
+      5'b00000 :
+        if(t_x.fmt inside {3'b000, 3'b001})
+          t_x.e_type = MEM_RD;
+        else
+          t_x.e_type = MEM_WR;
+
+      5'b00010 :
+        if(t_x.fmt == 3'b000)
+          t_x.e_type = IO_RD;
+        else
+          t_x.e_type = IO_WR;
+
+      5'b00100 :
+        if(t_x.fmt == 3'b000)
+          t_x.e_type = CFG_RD0;
+        else
+          t_x.e_type = CFG_WR0;
+
+      5'b00101 :
+        if(t_x.fmt == 3'b000)
+          t_x.e_type = CFG_RD1;
+        else
+          t_x.e_type = CFG_WR1;
+
+      5'b01010 :
+        if(t_x.fmt==3'b000)
+          t_x.e_type = CPL;
+        else if(t_x.fmt==3'b010)
+          t_x.e_type = CPL_DATA;
+
+    endcase
+
+
+
 
     // header DW count
     case(t_x.fmt)
@@ -185,13 +227,22 @@ class PCIe_TL_Monitor extends uvm_monitor;
       t_x.tlp_q.push_back(dw);
     end
     foreach(t_x.tlp_q[i])
-    `uvm_info("RC_TL_MONITOR", $sformatf("HEADER %h header_dw = %d",t_x.tlp_q[i],header_dw), UVM_HIGH)
+    `uvm_info("RC_TL_MONITOR", $sformatf("HEADER %h header_dw = %d",t_x.tlp_q[i],header_dw), UVM_LOW)
 
-    if(header_dw >= 3) begin
-      t_x.addr = t_x.tlp_q[2];
-    end
+  
+// ADD THESE LINES:
+    t_x.req_id   = t_x.tlp_q[1][31:16];
+    t_x.tag      = t_x.tlp_q[1][15:8];
+    t_x.last_BE  = t_x.tlp_q[1][7:4];
+    t_x.first_BE = t_x.tlp_q[1][3:0];
 
-    ////////////////////////////// PAYLOAD //////////////////////////////
+   if(header_dw == 3) begin
+  t_x.addr = t_x.tlp_q[2];
+end
+else if(header_dw == 4) begin
+  t_x.addr = {t_x.tlp_q[2], t_x.tlp_q[3][31:2], 2'b00};
+end
+        ////////////////////////////// PAYLOAD //////////////////////////////
     payload_length = t_x.length;
 
     if(t_x.fmt inside {3'b010, 3'b011}) begin
@@ -216,18 +267,14 @@ class PCIe_TL_Monitor extends uvm_monitor;
       t_x.tlp_q.push_back(dw);
     end
     foreach(t_x.tlp_q[i])
-    `uvm_info("RC_TL_MONITOR", $sformatf("HEADER data %h header_dw = %d",t_x.tlp_q[i],header_dw), UVM_HIGH)
+    `uvm_info("RC_TL_MONITOR", $sformatf("HEADER data %h header_dw = %d",t_x.tlp_q[i],header_dw), UVM_LOW)
 
-    `uvm_info("TX_TL_MONITOR", "=======================================================", UVM_HIGH)
+    `uvm_info("TX_TL_MONITOR", "=======================================================", UVM_LOW)
     foreach(t_x.tlp_q[i])
-      `uvm_info("TX_TL_MONITOR", $sformatf("[%s] TL_TX_MONITOR_TLP_PACKET[%0d] = %0h @(%0t)", tag, i, t_x.tlp_q[i], $time), UVM_HIGH)
+      `uvm_info("TX_TL_MONITOR", $sformatf("[%s] TL_TX_MONITOR_TLP_PACKET[%0d] = %0h @(%0t)", tag, i, t_x.tlp_q[i], $time), UVM_LOW)
 
     `uvm_info("TX_TL_MONITOR", $sformatf("[%s] DEBUG TX MONITOR - fmt=%0b r_type=%0b addr=%0h length=%0d",
-                                          tag, t_x.fmt, t_x.r_type, t_x.addr, t_x.length), UVM_HIGH)
-
-    `uvm_info("TX_TL_MONITOR",
-      $sformatf("[%s] TX request collected and sent to scoreboard: fmt=%0b r_type=%0b addr=%0h length=%0d",
-        tag, t_x.fmt, t_x.r_type, t_x.addr, t_x.length), UVM_LOW)
+                                          tag, t_x.fmt, t_x.r_type, t_x.addr, t_x.length), UVM_LOW)
 
     TX_TL_Send.write(t_x);
 
@@ -255,6 +302,40 @@ class PCIe_TL_Monitor extends uvm_monitor;
     r_x.r_type = dw[28:24];
     r_x.length = dw[9:0];
     r_x.td     = dw[15];
+     case(r_x.r_type)
+      5'b00000 :
+        if(r_x.fmt inside {3'b000, 3'b001})
+          r_x.e_type = MEM_RD;
+        else
+          r_x.e_type = MEM_WR;
+
+      5'b00010 :
+        if(r_x.fmt == 3'b000)
+          r_x.e_type = IO_RD;
+        else
+          r_x.e_type = IO_WR;
+
+      5'b00100 :
+        if(r_x.fmt == 3'b000)
+          r_x.e_type = CFG_RD0;
+        else
+          r_x.e_type = CFG_WR0;
+
+      5'b00101 :
+        if(r_x.fmt == 3'b000)
+          r_x.e_type = CFG_RD1;
+        else
+          r_x.e_type = CFG_WR1;
+
+      5'b01010 :
+        if(r_x.fmt ==3'b000)
+          r_x.e_type = CPL;
+        else if (r_x.fmt==3'b010)
+          r_x.e_type = CPL_DATA;
+
+    endcase
+
+
 
     // header DW count
     case(r_x.fmt)
@@ -275,11 +356,17 @@ class PCIe_TL_Monitor extends uvm_monitor;
     r_x.req_id = r_x.tlp_q[2][31:16];
     r_x.tag    = r_x.tlp_q[2][15:8];
 
-    `uvm_info("TX_TL_MONITOR", $sformatf("[%s] REQ_ID = %0d TAG = %0d", tag, r_x.req_id, r_x.tag), UVM_HIGH)
+     r_x.lower_addr   = r_x.tlp_q[2][6:0];
+    r_x.completer_id = r_x.tlp_q[1][29:14];
+    r_x.compl_status = r_x.tlp_q[1][13:11];
+    r_x.bcm          = r_x.tlp_q[1][10];
+    r_x.byte_count   = r_x.tlp_q[1][9:0];
 
-    if(header_dw >= 3) begin
-      r_x.addr = r_x.tlp_q[3];
-    end
+    `uvm_info("TX_TL_MONITOR", $sformatf("[%s] REQ_ID = %0d TAG = %0d BYTE_COUNT=%0d", tag, r_x.req_id, r_x.tag, r_x.byte_count), UVM_HIGH)
+
+ //   if(header_dw >= 3) begin
+   //   r_x.addr = r_x.tlp_q[3];
+//    end
 
     ////////////////////////////// PAYLOAD //////////////////////////////
     payload_dw = r_x.length;
@@ -306,7 +393,7 @@ class PCIe_TL_Monitor extends uvm_monitor;
 
       calculated_ecrc = r_x.calculate_ecrc();
 
-      `uvm_info("TX_TL_MONITOR", $sformatf("[%s] RX ECRC CHECK: RECEIVED=%08h CALCULATED=%08h", tag, r_x.ECRC, calculated_ecrc), UVM_HIGH)
+      `uvm_info("TX_TL_MONITOR", $sformatf("[%s] RX ECRC CHECK: RECEIVED=%08h CALCULATED=%08h", tag, r_x.ECRC, calculated_ecrc), UVM_LOW)
 
       if(calculated_ecrc == r_x.ECRC) begin
         r_x.ecrc_error   = 1'b0;
@@ -314,11 +401,7 @@ class PCIe_TL_Monitor extends uvm_monitor;
         r_x.tlp_q.push_back(r_x.ECRC);
 
         foreach(r_x.tlp_q[i])
-          `uvm_info("TX_TL_MONITOR", $sformatf("[%s] TX_TLP[%0d] = %08h @ %0t", tag, i, r_x.tlp_q[i], $time), UVM_HIGH)
-
-        `uvm_info("TX_TL_MONITOR",
-          $sformatf("[%s] RX completion collected (ECRC OK) and sent to scoreboard: length=%0d",
-            tag, r_x.length), UVM_LOW)
+          `uvm_info("TX_TL_MONITOR", $sformatf("[%s] TX_TLP[%0d] = %08h @ %0t", tag, i, r_x.tlp_q[i], $time), UVM_LOW)
 
         TX_TL_Send.write(r_x);
 
@@ -332,13 +415,41 @@ class PCIe_TL_Monitor extends uvm_monitor;
       r_x.compl_status = 3'b000;
 
       foreach(r_x.tlp_q[i])
-        `uvm_info("TX_TL_MONITOR", $sformatf("[%s] TX_TLP[%0d] = %08h @ %0t", tag, i, r_x.tlp_q[i], $time), UVM_HIGH)
+        `uvm_info("TX_TL_MONITOR", $sformatf("[%s] TX_TLP[%0d] = %08h @ %0t", tag, i, r_x.tlp_q[i], $time), UVM_LOW)
 
-      `uvm_info("TX_TL_MONITOR",
-        $sformatf("[%s] RX completion collected (no ECRC) and sent to scoreboard: length=%0d",
-          tag, r_x.length), UVM_LOW)
+
+      //--------------------------------------------------------------------------
+      // Write method called to send to TL Scoreboard 
+      //--------------------------------------------------------------------------
 
       TX_TL_Send.write(r_x);
+
+      `uvm_info("TL_MON", "Writing completion to analysis port", UVM_LOW)
+
+    end
+
+    //------------------------------------------------------------------
+    // Pushing into the Sequence item static queue to check in test 
+    //------------------------------------------------------------------ 
+
+    if (!r_x.ecrc_error && r_x.r_type == 5'b01010) begin
+
+      Sequence_item cpl;
+
+      cpl = Sequence_item::type_id::create("cpl");
+      cpl.copy(r_x);
+
+      //$cast(cpl, r_x.clone());
+      
+      cpl_q.delete();
+
+      `uvm_info("TL_MONITOR", "Static Queue Is Deleted", UVM_LOW)
+      
+      cpl_q.push_back(cpl);
+
+      `uvm_info("TX_MONITOR", $sformatf("Size = %0d", cpl_q.size), UVM_LOW)
+
+      `uvm_info("TX_MON", $sformatf("Completion stored. Queue Size=%0d Tag=%0d", cpl_q.size(),cpl.tag), UVM_LOW)
 
     end
 
@@ -373,6 +484,40 @@ class PCIe_TL_Monitor extends uvm_monitor;
     r_x.length = dw[9:0];
     r_x.td     = dw[15];
     r_x.at     = dw[11:10];
+   case(r_x.r_type)
+      5'b00000 :
+        if(r_x.fmt inside {3'b000, 3'b001})
+          r_x.e_type = MEM_RD;
+        else
+          r_x.e_type = MEM_WR;
+
+      5'b00010 :
+        if(r_x.fmt == 3'b000)
+          r_x.e_type = IO_RD;
+        else
+          r_x.e_type = IO_WR;
+
+      5'b00100 :
+        if(r_x.fmt == 3'b000)
+          r_x.e_type = CFG_RD0;
+        else
+          r_x.e_type = CFG_WR0;
+
+      5'b00101 :
+        if(r_x.fmt == 3'b000)
+          r_x.e_type = CFG_RD1;
+        else
+          r_x.e_type = CFG_WR1;
+
+      5'b01010 :
+        if(r_x.fmt == 3'b000)
+          r_x.e_type = CPL;
+        else if (r_x.fmt==3'b010)
+          r_x.e_type = CPL_DATA;
+
+    endcase
+
+
 
     // header DW count
     case(r_x.fmt)
@@ -401,14 +546,17 @@ class PCIe_TL_Monitor extends uvm_monitor;
     r_x.register_num     = r_x.tlp_q[2][7:2];
     r_x.R4               = r_x.tlp_q[2][1:0];
 
-    `uvm_info("RX_TL_MONITOR", $sformatf("[%s] BYTE_COUNT = %0d REQ_ID = %0d TAG = %0d EP_DEVICE = %0h", tag, r_x.byte_count, r_x.req_id, r_x.tag, r_x.ep_device), UVM_HIGH)
+    `uvm_info("RX_TL_MONITOR", $sformatf("[%s] BYTE_COUNT = %0d REQ_ID = %0d TAG = %0d EP_DEVICE = %0h", tag, r_x.byte_count, r_x.req_id, r_x.tag, r_x.ep_device), UVM_LOW)
     `uvm_info("MON",
 $sformatf("MON: reg_num=%0d ext_reg=%0d",
-r_x.register_num, r_x.ext_register_num), UVM_HIGH)
+r_x.register_num, r_x.ext_register_num), UVM_NONE)
 
-    if(header_dw >= 3) begin
-      r_x.addr = r_x.tlp_q[2];
-    end
+      if(header_dw == 3) begin
+  r_x.addr = r_x.tlp_q[2];
+end
+else if(header_dw == 4) begin
+  r_x.addr = {r_x.tlp_q[2], r_x.tlp_q[3][31:2], 2'b00};
+end
 
     ////////////////////////////// PAYLOAD //////////////////////////////
     payload_dw = r_x.length;
@@ -435,7 +583,7 @@ r_x.register_num, r_x.ext_register_num), UVM_HIGH)
 
       calculated_ecrc = r_x.calculate_ecrc();
 
-      `uvm_info("RX_TL_MONITOR", $sformatf("[%s] RX ECRC CHECK: RECEIVED=%08h CALCULATED=%08h", tag, r_x.ECRC, calculated_ecrc), UVM_HIGH)
+      `uvm_info("RX_TL_MONITOR", $sformatf("[%s] RX ECRC CHECK: RECEIVED=%08h CALCULATED=%08h", tag, r_x.ECRC, calculated_ecrc), UVM_LOW)
 
       if(calculated_ecrc == r_x.ECRC) begin
         r_x.ecrc_error   = 1'b0;
@@ -443,18 +591,14 @@ r_x.register_num, r_x.ext_register_num), UVM_HIGH)
         r_x.tlp_q.push_back(r_x.ECRC);
 
         foreach(r_x.tlp_q[i])
-          `uvm_info("RX_TL_MONITOR", $sformatf("[%s] RX_TLP[%0d] = %08h @ %0t", tag, i, r_x.tlp_q[i], $time), UVM_HIGH)
+          `uvm_info("RX_TL_MONITOR", $sformatf("[%s] RX_TLP[%0d] = %08h @ %0t", tag, i, r_x.tlp_q[i], $time), UVM_LOW)
 
-        `uvm_info("RX_TL_MONITOR",
-          $sformatf("[%s] RX request collected (ECRC OK) and sent to scoreboard: addr=%0h length=%0d tag=%0d",
-            tag, r_x.addr, r_x.length, r_x.tag), UVM_LOW)
         RX_TL_Send.write(r_x);
-
 	`uvm_info("MON_TO_LUT",
 $sformatf("Sending to LUT: reg=%0d tag=%0d",
           r_x.register_num,
           r_x.tag),
-UVM_LOW)
+UVM_NONE)
         RX_TL_MON_Send.write(r_x);
 
       end else begin
@@ -467,11 +611,8 @@ UVM_LOW)
       r_x.compl_status = 3'b000;
 
       foreach(r_x.tlp_q[i])
-        `uvm_info("RX_TL_MONITOR", $sformatf("[%s] RX_TLP[%0d] = %08h @ %0t", tag, i, r_x.tlp_q[i], $time), UVM_HIGH)
+        `uvm_info("RX_TL_MONITOR", $sformatf("[%s] RX_TLP[%0d] = %08h @ %0t", tag, i, r_x.tlp_q[i], $time), UVM_LOW)
 
-      `uvm_info("RX_TL_MONITOR",
-        $sformatf("[%s] RX request collected (no ECRC) and sent to scoreboard/LUT: addr=%0h length=%0d tag=%0d",
-          tag, r_x.addr, r_x.length, r_x.tag), UVM_LOW)
       RX_TL_Send.write(r_x);
       RX_TL_MON_Send.write(r_x);
           end
@@ -501,6 +642,41 @@ UVM_LOW)
     t_x.r_type = dw[28:24];
     t_x.length = dw[9:0];
     t_x.td     = dw[15];
+     case(t_x.r_type)
+      5'b00000 :
+        if(t_x.fmt inside {3'b000, 3'b001})
+          t_x.e_type = MEM_RD;
+        else
+          t_x.e_type = MEM_WR;
+
+      5'b00010 :
+        if(t_x.fmt == 3'b000)
+          t_x.e_type = IO_RD;
+        else
+          t_x.e_type = IO_WR;
+
+      5'b00100 :
+        if(t_x.fmt == 3'b000)
+          t_x.e_type = CFG_RD0;
+        else
+          t_x.e_type = CFG_WR0;
+
+      5'b00101 :
+        if(t_x.fmt == 3'b000)
+          t_x.e_type = CFG_RD1;
+        else
+          t_x.e_type = CFG_WR1;
+
+      5'b01010 :
+        if(t_x.fmt == 3'b000)
+          t_x.e_type = CPL;
+        else if (t_x.fmt==3'b010)
+          t_x.e_type = CPL_DATA;
+
+    endcase
+
+
+
 
     // header DW count
     case(t_x.fmt)
@@ -517,6 +693,13 @@ UVM_LOW)
       dw = RX_TL_DL.tl_tx_data;
       t_x.tlp_q.push_back(dw);
     end
+ t_x.req_id       = t_x.tlp_q[2][31:16];
+    t_x.tag          = t_x.tlp_q[2][15:8];
+    t_x.lower_addr   = t_x.tlp_q[2][6:0];
+    t_x.completer_id = t_x.tlp_q[1][29:14];
+    t_x.compl_status = t_x.tlp_q[1][13:11];
+    t_x.bcm          = t_x.tlp_q[1][10];
+    t_x.byte_count   = t_x.tlp_q[1][9:0];
 
     ////////////////////////////// PAYLOAD //////////////////////////////
     payload_length = t_x.length;
@@ -544,11 +727,7 @@ UVM_LOW)
     end
 
     foreach(t_x.tlp_q[i])
-      `uvm_info("RX_TL_MONITOR", $sformatf("[%s] TL_RX_MONITOR_TLP_PACKET[%0d] = %0h @(%0t)", tag, i, t_x.tlp_q[i], $time), UVM_HIGH)
-
-    `uvm_info("RX_TL_MONITOR",
-      $sformatf("[%s] EP completion collected and sent to scoreboard: fmt=%0b r_type=%0b length=%0d",
-        tag, t_x.fmt, t_x.r_type, t_x.length), UVM_LOW)
+      `uvm_info("RX_TL_MONITOR", $sformatf("[%s] TL_RX_MONITOR_TLP_PACKET[%0d] = %0h @(%0t)", tag, i, t_x.tlp_q[i], $time), UVM_LOW)
 
     RX_TL_Send.write(t_x);
 
@@ -557,4 +736,5 @@ UVM_LOW)
   endtask : ep_sending_rx_completion
 
 endclass : PCIe_TL_Monitor
+
 

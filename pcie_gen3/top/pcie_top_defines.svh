@@ -19,12 +19,17 @@
   `define NUM_LANES 1 
 `endif
 
+`ifndef NUM_VC
+  `define NUM_VC 8
+`endif
+
 // Alias macros - single definition point
 `define PCIE_NUM_RC `NUM_RC
 `define PCIE_NUM_EP `NUM_EP
 `define PCIE_NUM_RC_GEN `NUM_RC_GEN
 `define PCIE_NUM_EP_GEN `NUM_EP_GEN
 `define PCIE_NUM_LANES `NUM_LANES
+`define PCIE_NUM_VC `NUM_VC
 
 
 `endif
@@ -95,4 +100,5 @@
     VC0, VC1, VC2, VC3, VC4, VC5, VC6, VC7
 
   } vc_id_e;
+
 

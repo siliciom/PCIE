@@ -41,7 +41,7 @@ class PCIe_DLL_Driver extends uvm_driver #(Sequence_item);
   bit [31:0] rc_rx_local_queue[$];
   bit [31:0] rc_tx_local_queue[$];
 
-  bit [11:0] rc_next_transmit_seq = 12'd2;
+  bit [11:0] rc_next_transmit_seq = 0;
   bit [11:0] rc_DL_SEQ;
   bit [11:0] rc_aked_seq;
   bit [7:0]  rc_dllp_type;
@@ -71,19 +71,21 @@ class PCIe_DLL_Driver extends uvm_driver #(Sequence_item);
   bit rc_initfc1_tx_done;
   bit rc_initfc2_tx_done;
 
-  bit [7:0]  rc_fc_ph;
-  bit [7:0]  rc_fc_nph;
-  bit [7:0]  rc_fc_cmplh;
-  bit [11:0] rc_fc_pd;
-  bit [11:0] rc_fc_npd;
-  bit [11:0] rc_fc_cmpld;
-  bit [7:0]  rc_ph_fc;
-  bit [7:0]  rc_nph_fc;
-  bit [7:0]  rc_cmplh_fc;
-  bit [11:0] rc_pd_fc;
-  bit [11:0] rc_npd_fc;
-  bit [11:0] rc_cmpld_fc;
-
+  // Own advertised credits, per VC (from TL layer via write_FC)
+  reg [`NUM_VC][8]  rc_fc_ph;
+  reg [`NUM_VC][8]  rc_fc_nph;
+  reg [`NUM_VC][8]  rc_fc_cmplh;
+  reg [`NUM_VC][12] rc_fc_pd;
+  reg [`NUM_VC][12] rc_fc_npd;
+  reg [`NUM_VC][12] rc_fc_cmpld;
+  // Remote credits received via INITFC/UPDATEFC DLLPs, per VC
+  reg [`NUM_VC][8]  rc_ph_fc;
+  reg [`NUM_VC][8]  rc_nph_fc;
+  reg [`NUM_VC][8]  rc_cmplh_fc;
+  reg [`NUM_VC][12] rc_pd_fc;
+  reg [`NUM_VC][12] rc_npd_fc;
+  reg [`NUM_VC][12] rc_cmpld_fc;
+  
   bit [11:0] rc_an_seq_no;
 
   uvm_event rc_nack_ev;
@@ -106,7 +108,7 @@ class PCIe_DLL_Driver extends uvm_driver #(Sequence_item);
   bit [31:0] ep_tx_local_queue[$];
   Sequence_item ep_rx_pkt;
 
-  bit [11:0] ep_rx_next_transmit_seq = 12'd2;
+  bit [11:0] ep_rx_next_transmit_seq = 0;
   bit [11:0] ep_RX_DL_SEQ;
   bit [11:0] ep_aked_seq;
   bit [7:0]  ep_dllp_type;
@@ -138,18 +140,20 @@ class PCIe_DLL_Driver extends uvm_driver #(Sequence_item);
   bit ep_initfc1_tx_done;
   bit ep_initfc2_tx_done;
 
-  bit [7:0]  ep_fc_ph;
-  bit [7:0]  ep_fc_nph;
-  bit [7:0]  ep_fc_cmplh;
-  bit [11:0] ep_fc_pd;
-  bit [11:0] ep_fc_npd;
-  bit [11:0] ep_fc_cmpld;
-  bit [7:0]  ep_ph_fc;
-  bit [7:0]  ep_nph_fc;
-  bit [7:0]  ep_cmplh_fc;
-  bit [11:0] ep_pd_fc;
-  bit [11:0] ep_npd_fc;
-  bit [11:0] ep_cmpld_fc;
+  // Own advertised credits, per VC (from TL layer via write_fc)
+  reg [`NUM_VC][8]  ep_fc_ph;
+  reg [`NUM_VC][8]  ep_fc_nph;
+  reg [`NUM_VC][8]  ep_fc_cmplh;
+  reg [`NUM_VC][12] ep_fc_pd;
+  reg [`NUM_VC][12] ep_fc_npd;
+  reg [`NUM_VC][12] ep_fc_cmpld;
+  // Remote credits received via INITFC/UPDATEFC DLLPs, per VC
+  reg [`NUM_VC][8]  ep_ph_fc;
+  reg [`NUM_VC][8]  ep_nph_fc;
+  reg [`NUM_VC][8]  ep_cmplh_fc;
+  reg [`NUM_VC][12] ep_pd_fc;
+  reg [`NUM_VC][12] ep_npd_fc;
+  reg [`NUM_VC][12] ep_cmpld_fc;
 
   bit [11:0] ep_an_seq_no;
 
@@ -281,26 +285,26 @@ function void write_FC(Sequence_item t_x);
   endfunction
 
   function void write_RX(Sequence_item r_x);
-	   if (r_x.rx_data_t.size() > 0 || r_x.rc_ack_nak_seq > 0) begin
+	   if (r_x.rx_data_t.size() > 0 || r_x.rc_ack_nak_seq == 0 || r_x.rc_ack_nak_seq > 0) begin
     rc_an_seq_no = r_x.rc_ack_nak_seq;
         rc_rx_pkt_tlp.try_put(r_x);
 end
     if (r_x.dllp_packet_q.size() > 0) begin
         rc_rx_pkt_dllp.try_put(r_x);
-     if(r_x.rc_data_type==4'b0100)begin
-	rc_ph_fc=r_x.rc_header_pfc;		       
-	rc_pd_fc=r_x.rc_data_pfc; 
+     if(r_x.rc_data_type==4'b0100 || r_x.rc_data_type==4'b1000)begin
+	rc_ph_fc[r_x.rc_dllp_vc]=r_x.rc_header_pfc;		       
+	rc_pd_fc[r_x.rc_dllp_vc]=r_x.rc_data_pfc; 
     //  rc_fc_received_ev.trigger();
       
 	      end 
-	   	      if(r_x.rc_data_type==4'b0101)begin
-	rc_nph_fc=r_x.rc_header_npfc ;
-	rc_npd_fc=r_x.rc_data_npfc;  
+   if(r_x.rc_data_type==4'b0101 || r_x.rc_data_type==4'b1001)begin
+	rc_nph_fc[r_x.rc_dllp_vc]=r_x.rc_header_npfc ;
+	rc_npd_fc[r_x.rc_dllp_vc]=r_x.rc_data_npfc;  
 //	rc_fc_received_ev.trigger();
 	      end 
-	   	      if(r_x.rc_data_type==4'b0110)begin
-	rc_cmplh_fc=r_x.rc_header_cmplfc; 
-	rc_cmpld_fc=r_x.rc_data_cmplfc;  
+   if(r_x.rc_data_type==4'b0110 || r_x.rc_data_type==4'b1010)begin
+	rc_cmplh_fc[r_x.rc_dllp_vc]=r_x.rc_header_cmplfc; 
+	rc_cmpld_fc[r_x.rc_dllp_vc]=r_x.rc_data_cmplfc;  
 //	rc_fc_received_ev.trigger();
  end 
     end
@@ -318,6 +322,26 @@ end
     ep_fc_cmplh = t_x.ep_fc_cmplh;
     ep_fc_cmpld = t_x.ep_fc_cmpld;
 
+    if(t_x.ep_updated_credits == 1) begin
+    ep_fc_ph    = t_x.ep_fc_ph;
+    ep_fc_pd    = t_x.ep_fc_pd;
+    ep_fc_nph   = t_x.ep_fc_nph;
+    ep_fc_npd   = t_x.ep_fc_npd;
+    ep_fc_cmplh = t_x.ep_fc_cmplh;
+    ep_fc_cmpld = t_x.ep_fc_cmpld;
+
+    `uvm_info("WR_EP_FC_UPDATE",
+          $sformatf("EP FC Credits: PH=%0h, PD=%0d, NPH=%0h, NPD=%0h, CPLH=%0h, CPLD=%0h",
+                    t_x.ep_fc_ph,
+                    t_x.ep_fc_pd,
+                    t_x.ep_fc_nph,
+                    t_x.ep_fc_npd,
+                    t_x.ep_fc_cmplh,
+                    t_x.ep_fc_cmpld),
+          UVM_LOW)
+	    ep_fc_received_ev.trigger();	
+  end
+
    endfunction
 
       function void write_tx(Sequence_item t_x);
@@ -327,25 +351,22 @@ end
  function void write_rx(Sequence_item r_x);
     if (r_x.dllp_packet_rx_q.size() > 0) begin
                 ep_rx_pkt_dllp.try_put(r_x);
-        	 if(r_x.ep_data_type==4'b0100)begin
-	ep_ph_fc=r_x.ep_header_pfc; 		       
-	ep_pd_fc=r_x.ep_data_pfc;
-    // ep_fc_received_ev.trigger();	
+        	 if(r_x.ep_data_type==4'b0100 || r_x.ep_data_type==4'b1000 )begin
+	ep_ph_fc[r_x.ep_dllp_vc]=r_x.ep_header_pfc; 		       
+	ep_pd_fc[r_x.ep_dllp_vc]=r_x.ep_data_pfc;
 	      end 
-	   	      if(r_x.ep_data_type==4'b0101)begin
-	ep_nph_fc=r_x.ep_header_npfc; 
-	ep_npd_fc=r_x.ep_data_npfc;
-     // ep_fc_received_ev.trigger();	
+	   	      if(r_x.ep_data_type==4'b0101 || r_x.ep_data_type==4'b1001)begin
+	ep_nph_fc[r_x.ep_dllp_vc]=r_x.ep_header_npfc; 
+	ep_npd_fc[r_x.ep_dllp_vc]=r_x.ep_data_npfc;
 	      end 
-	   	      if(r_x.ep_data_type==4'b0110)begin
-	ep_cmplh_fc=r_x.ep_header_cmplfc; 
-	ep_cmpld_fc=r_x.ep_data_cmplfc;
-    //  ep_fc_received_ev.trigger();	
+	   	      if(r_x.ep_data_type==4'b0110 || r_x.ep_data_type==4'b1010)begin
+	ep_cmplh_fc[r_x.ep_dllp_vc]=r_x.ep_header_cmplfc; 
+	ep_cmpld_fc[r_x.ep_dllp_vc]=r_x.ep_data_cmplfc;
 
 	      end 
 
    end
-    if (r_x.rx_data.size() > 0 || r_x.ep_ack_nak_seq > 0) begin
+    if (r_x.rx_data.size() > 0 || r_x.ep_ack_nak_seq == 0 || r_x.ep_ack_nak_seq > 0) begin
         ep_an_seq_no = r_x.ep_ack_nak_seq;
                 ep_rx_pkt_tlp.try_put(r_x);
     end
@@ -359,6 +380,7 @@ function bit [15:0] crc16
 );
 
   bit [15:0] crc;
+    bit [15:0] crc_16;
   bit feedback;
 
   crc = 16'hFFFF;  // Initial value
@@ -372,8 +394,19 @@ function bit [15:0] crc16
       crc ^= 16'h100B;
   end
 
-  return ~crc;
+  crc = ~crc;
 
+  for (int byte_num = 0; byte_num < 2; byte_num++) begin
+
+       for (int bit_num = 0; bit_num < 8; bit_num++) begin
+
+         crc_16[byte_num*8 + bit_num] = crc[byte_num*8 + (7-bit_num)];
+
+       end
+
+     end
+
+  return crc_16;
 endfunction
 
   function bit [47:0] create_dllp(
@@ -398,42 +431,65 @@ endfunction
 
   function bit [31:0] rc_calculate_lcrc(input bit [31:0] pkt_q[$]);
     bit [31:0] crc;
+      bit [31:0] lcrc;
     bit data_bit;
     bit feedback;
-         foreach(pkt_q[i]) begin
-                end
-
+       
     crc = 32'hFFFF_FFFF;
     foreach(pkt_q[i]) begin
       for(int b = 0; b < 32; b++) begin
         data_bit = pkt_q[i][b];
-        feedback = crc[31] ^ data_bit;
-        crc = crc << 1;
+        feedback = crc[0] ^ data_bit;
+        crc = crc >> 1;
         if(feedback)
-          crc ^= 32'h04C11DB7;
+           crc ^= 32'hEDB8_8320;// Standard Polynomial - 04C11DB7
+
       end
     end
-    return ~crc;
+   crc = ~crc;
+
+     for (int byte_num = 0; byte_num < 4; byte_num++) begin
+
+       for (int bit_num = 0; bit_num < 8; bit_num++) begin
+
+         lcrc[byte_num*8 + bit_num] = crc[byte_num*8 + (7-bit_num)];
+
+       end
+
+     end
+
+     return lcrc;
   endfunction : rc_calculate_lcrc
 
     function bit [31:0] ep_calculate_lcrc(input bit [31:0] pkt_q[$]);
     bit [31:0] crc;
+    bit [31:0] lcrc;    
     bit data_bit;
     bit feedback;
-     foreach(pkt_q[i]) begin
-                end
 
     crc = 32'hFFFF_FFFF;
     foreach(pkt_q[i]) begin
       for(int b = 0; b < 32; b++) begin
         data_bit = pkt_q[i][b];
-        feedback = crc[31] ^ data_bit;
-        crc = crc << 1;
+        feedback = crc[0] ^ data_bit;
+        crc = crc >> 1;
         if(feedback)
-          crc ^= 32'h04C11DB7;
+         crc ^= 32'hEDB8_8320;// Standard Polynomial - 04C11DB7
       end
     end
-    return ~crc;
+     crc = ~crc;
+
+    for (int byte_num = 0; byte_num < 4; byte_num++) begin
+
+       for (int bit_num = 0; bit_num < 8; bit_num++) begin
+
+         lcrc[byte_num*8 + bit_num] = crc[byte_num*8 + (7-bit_num)];
+
+       end
+
+     end
+
+     return lcrc;
   endfunction : ep_calculate_lcrc
 
   
@@ -476,8 +532,12 @@ endfunction
         rc_ack_nak_seq = pkt.rc_ack_nack_seq;
       
       if (rc_ack_nak_seq == rc_aked_seq) begin
-
+	      if(rc_dllp_type == 8'b0000_0000)begin
+		      rc_ackd_seq(rc_dllp_type, rc_ack_nak_seq);
+	      end
+	      else begin
             rc_nak(rc_dllp_type, rc_ack_nak_seq);
+              end
    
       end
         else begin
@@ -536,7 +596,7 @@ $display("[%0t] BEFORE DELETE : rd_ptr=%0d seq=%0d queue_size=%0d queue=%p",
 	end
 
         // stop after deleting ACKed sequence
-        if(seq > rc_ack_nak_seq)
+        if(seq == rc_ack_nak_seq)
             break;
 
     end
@@ -640,34 +700,39 @@ task rc_send_initfc1_dllps();
     bit [47:0] initfc1_np;
     bit [47:0] initfc1_cpl;
 
-    initfc1_p = create_dllp(INITFC1_P,
-                            3'b000,
-                            rc_fc_ph,
-                            rc_fc_pd);
+    // One P/NP/CPL triplet per VC - 8VC support (NUM_VC=`NUM_VC)
+    for (int vc = 0; vc < `NUM_VC; vc++) begin
 
-    initfc1_np = create_dllp(INITFC1_NP,
-                             3'b000,
-                             rc_fc_nph,
-                             rc_fc_npd);
+      initfc1_p = create_dllp(INITFC1_P,
+                              vc[2:0],
+                              rc_fc_ph[vc],
+                              rc_fc_pd[vc]);
 
-    initfc1_cpl = create_dllp(INITFC1_CPL,
-                              3'b000,
-                              rc_fc_cmplh,
-                              rc_fc_cmpld);
+      initfc1_np = create_dllp(INITFC1_NP,
+                               vc[2:0],
+                               rc_fc_nph[vc],
+                               rc_fc_npd[vc]);
 
-    rc_send_one_dllp(initfc1_p);
-    @(posedge TX_DLL_PCS.CLK);
-    TX_DLL_PCS.dl_tx_valid <= 1'b0;
-    TX_DLL_PCS.dl_packet <= 1'b0;
-    rc_send_one_dllp(initfc1_np);
-    @(posedge TX_DLL_PCS.CLK);
-    TX_DLL_PCS.dl_tx_valid <= 1'b0;
-    TX_DLL_PCS.dl_packet <= 1'b0;
-    rc_send_one_dllp(initfc1_cpl);
+      initfc1_cpl = create_dllp(INITFC1_CPL,
+                                vc[2:0],
+                                rc_fc_cmplh[vc],
+                                rc_fc_cmpld[vc]);
 
-    @(posedge TX_DLL_PCS.CLK);
-    TX_DLL_PCS.dl_tx_valid <= 1'b0;
-    TX_DLL_PCS.dl_packet <= 1'b0;
+      rc_send_one_dllp(initfc1_p);
+      @(posedge TX_DLL_PCS.CLK);
+      TX_DLL_PCS.dl_tx_valid <= 1'b0;
+      TX_DLL_PCS.dl_packet <= 1'b0;
+      rc_send_one_dllp(initfc1_np);
+      @(posedge TX_DLL_PCS.CLK);
+      TX_DLL_PCS.dl_tx_valid <= 1'b0;
+      TX_DLL_PCS.dl_packet <= 1'b0;
+      rc_send_one_dllp(initfc1_cpl);
+
+      @(posedge TX_DLL_PCS.CLK);
+      TX_DLL_PCS.dl_tx_valid <= 1'b0;
+      TX_DLL_PCS.dl_packet <= 1'b0;
+
+    end
 
     rc_initfc1_tx_done = 1'b1;
 
@@ -679,34 +744,39 @@ task rc_send_initfc2_dllps();
     bit [47:0] initfc2_np;
     bit [47:0] initfc2_cpl;
 
-    initfc2_p = create_dllp(INITFC2_P,
-                            3'b000,
-                            rc_fc_ph,
-                            rc_fc_pd);
+    // One P/NP/CPL triplet per VC - 8VC support (NUM_VC=`NUM_VC)
+    for (int vc = 0; vc < `NUM_VC; vc++) begin
 
-    initfc2_np = create_dllp(INITFC2_NP,
-                             3'b000,
-                             rc_fc_nph,
-                             rc_fc_npd);
+      initfc2_p = create_dllp(INITFC2_P,
+                              vc[2:0],
+                              rc_fc_ph[vc],
+                              rc_fc_pd[vc]);
 
-    initfc2_cpl = create_dllp(INITFC2_CPL,
-                              3'b000,
-                              rc_fc_cmplh,
-                              rc_fc_cmpld);
+      initfc2_np = create_dllp(INITFC2_NP,
+                               vc[2:0],
+                               rc_fc_nph[vc],
+                               rc_fc_npd[vc]);
 
-    rc_send_one_dllp(initfc2_p);
-    @(posedge TX_DLL_PCS.CLK);
-    TX_DLL_PCS.dl_tx_valid <= 1'b0;
-    TX_DLL_PCS.dl_packet <= 1'b0;
-    rc_send_one_dllp(initfc2_np);
-    @(posedge TX_DLL_PCS.CLK);
-    TX_DLL_PCS.dl_tx_valid <= 1'b0;
-    TX_DLL_PCS.dl_packet <= 1'b0;
-    rc_send_one_dllp(initfc2_cpl);
-    @(posedge TX_DLL_PCS.CLK);
+      initfc2_cpl = create_dllp(INITFC2_CPL,
+                                vc[2:0],
+                                rc_fc_cmplh[vc],
+                                rc_fc_cmpld[vc]);
 
-    TX_DLL_PCS.dl_tx_valid <= 1'b0;
-    TX_DLL_PCS.dl_packet <= 1'b0;
+      rc_send_one_dllp(initfc2_p);
+      @(posedge TX_DLL_PCS.CLK);
+      TX_DLL_PCS.dl_tx_valid <= 1'b0;
+      TX_DLL_PCS.dl_packet <= 1'b0;
+      rc_send_one_dllp(initfc2_np);
+      @(posedge TX_DLL_PCS.CLK);
+      TX_DLL_PCS.dl_tx_valid <= 1'b0;
+      TX_DLL_PCS.dl_packet <= 1'b0;
+      rc_send_one_dllp(initfc2_cpl);
+      @(posedge TX_DLL_PCS.CLK);
+
+      TX_DLL_PCS.dl_tx_valid <= 1'b0;
+      TX_DLL_PCS.dl_packet <= 1'b0;
+
+    end
 
     rc_initfc2_tx_done = 1'b1;
 
@@ -718,33 +788,38 @@ task rc_send_initfc2_dllps();
     bit [47:0] updatefc_np;
     bit [47:0] updatefc_cpl;
 
-    updatefc_p = create_dllp(UPDATEFC_P,
-                            3'b000,
-                            rc_fc_ph,
-                            rc_fc_pd);
+    // One P/NP/CPL triplet per VC - 8VC support (NUM_VC=`NUM_VC)
+    for (int vc = 0; vc < 1; vc++) begin
 
-    updatefc_np = create_dllp(UPDATEFC_NP,
-                             3'b000,
-                             rc_fc_nph,
-                             rc_fc_npd);
+      updatefc_p = create_dllp(UPDATEFC_P,
+                              vc[2:0],
+                              rc_fc_ph[vc],
+                              rc_fc_pd[vc]);
 
-    updatefc_cpl = create_dllp(UPDATEFC_CPL,
-                              3'b000,
-                              rc_fc_cmplh,
-                              rc_fc_cmpld);
+      updatefc_np = create_dllp(UPDATEFC_NP,
+                               vc[2:0],
+                               rc_fc_nph[vc],
+                               rc_fc_npd[vc]);
 
-    rc_send_one_dllp(updatefc_p);
-    @(posedge TX_DLL_PCS.CLK);
-    TX_DLL_PCS.dl_tx_valid <= 1'b0;
-    TX_DLL_PCS.dl_packet <= 1'b0;
-    rc_send_one_dllp(updatefc_np);
-    @(posedge TX_DLL_PCS.CLK);
-    TX_DLL_PCS.dl_tx_valid <= 1'b0;
-    TX_DLL_PCS.dl_packet <= 1'b0;
-    rc_send_one_dllp(updatefc_cpl);
-    @(posedge TX_DLL_PCS.CLK);
-    TX_DLL_PCS.dl_tx_valid <= 1'b0;
-    TX_DLL_PCS.dl_packet <= 1'b0;
+      updatefc_cpl = create_dllp(UPDATEFC_CPL,
+                                vc[2:0],
+                                rc_fc_cmplh[vc],
+                                rc_fc_cmpld[vc]);
+
+      rc_send_one_dllp(updatefc_p);
+      @(posedge TX_DLL_PCS.CLK);
+      TX_DLL_PCS.dl_tx_valid <= 1'b0;
+      TX_DLL_PCS.dl_packet <= 1'b0;
+      rc_send_one_dllp(updatefc_np);
+      @(posedge TX_DLL_PCS.CLK);
+      TX_DLL_PCS.dl_tx_valid <= 1'b0;
+      TX_DLL_PCS.dl_packet <= 1'b0;
+      rc_send_one_dllp(updatefc_cpl);
+      @(posedge TX_DLL_PCS.CLK);
+      TX_DLL_PCS.dl_tx_valid <= 1'b0;
+      TX_DLL_PCS.dl_packet <= 1'b0;
+
+    end
 
   endtask
   task RC_ACK_NAK_dllps();
@@ -785,6 +860,7 @@ task rc_fc_to_tl();
 
 @(posedge TX_TL_DL.CLK);
 
+// Whole-array (all `NUM_VC VCs) forward to the TL layer in one shot
 TX_TL_DL.rc_fc_ph    <= rc_ph_fc;
 TX_TL_DL.rc_fc_pd    <= rc_pd_fc;
 
@@ -942,7 +1018,12 @@ task rc_tx_recived_packet
 
       if (ep_ack_nak_seq == ep_aked_seq) begin
 
-        ep_nak(ep_dllp_type, ep_ack_nak_seq);
+            if(ep_dllp_type == 8'b0000_0000)begin
+		      ep_ackd_seq(ep_dllp_type, ep_ack_nak_seq);
+	      end
+	      else begin
+            ep_nak(ep_dllp_type, ep_ack_nak_seq);
+              end
    
       end
         else begin
@@ -1108,33 +1189,38 @@ task ep_send_initfc1_dllps();
     bit [47:0] initfc1_np;
     bit [47:0] initfc1_cpl;
 
-    initfc1_p = create_dllp(INITFC1_P,
-                            3'b000,
-                            ep_fc_ph,
-                            ep_fc_pd);
+    // One P/NP/CPL triplet per VC - 8VC support (NUM_VC=`NUM_VC)
+    for (int vc = 0; vc < `NUM_VC; vc++) begin
 
-    initfc1_np = create_dllp(INITFC1_NP,
-                             3'b000,
-                             ep_fc_nph,
-                             ep_fc_npd);
+      initfc1_p = create_dllp(INITFC1_P,
+                              vc[2:0],
+                              ep_fc_ph[vc],
+                              ep_fc_pd[vc]);
 
-    initfc1_cpl = create_dllp(INITFC1_CPL,
-                              3'b000,
-                              ep_fc_cmplh,
-                              ep_fc_cmpld);
+      initfc1_np = create_dllp(INITFC1_NP,
+                               vc[2:0],
+                               ep_fc_nph[vc],
+                               ep_fc_npd[vc]);
 
-    ep_send_one_dllp(initfc1_p);
-    @(posedge RX_DLL_PCS.CLK);
-    RX_DLL_PCS.dl_tx_valid <= 1'b0;
-    RX_DLL_PCS.dl_packet <= 1'b0;
-    ep_send_one_dllp(initfc1_np);
-    @(posedge RX_DLL_PCS.CLK);
-    RX_DLL_PCS.dl_tx_valid <= 1'b0;
-    RX_DLL_PCS.dl_packet <= 1'b0;
-    ep_send_one_dllp(initfc1_cpl);
-    @(posedge RX_DLL_PCS.CLK);
-    RX_DLL_PCS.dl_tx_valid <= 1'b0;
-    RX_DLL_PCS.dl_packet <= 1'b0;
+      initfc1_cpl = create_dllp(INITFC1_CPL,
+                                vc[2:0],
+                                ep_fc_cmplh[vc],
+                                ep_fc_cmpld[vc]);
+
+      ep_send_one_dllp(initfc1_p);
+      @(posedge RX_DLL_PCS.CLK);
+      RX_DLL_PCS.dl_tx_valid <= 1'b0;
+      RX_DLL_PCS.dl_packet <= 1'b0;
+      ep_send_one_dllp(initfc1_np);
+      @(posedge RX_DLL_PCS.CLK);
+      RX_DLL_PCS.dl_tx_valid <= 1'b0;
+      RX_DLL_PCS.dl_packet <= 1'b0;
+      ep_send_one_dllp(initfc1_cpl);
+      @(posedge RX_DLL_PCS.CLK);
+      RX_DLL_PCS.dl_tx_valid <= 1'b0;
+      RX_DLL_PCS.dl_packet <= 1'b0;
+
+    end
 
      ep_initfc1_tx_done = 1'b1;
 
@@ -1146,37 +1232,88 @@ task ep_send_initfc2_dllps();
     bit [47:0] initfc2_np;
     bit [47:0] initfc2_cpl;
 
-    initfc2_p = create_dllp(INITFC2_P,
-                            3'b000,
-                            ep_fc_ph,
-                            ep_fc_pd);
+    // One P/NP/CPL triplet per VC - 8VC support (NUM_VC=`NUM_VC)
+    for (int vc = 0; vc < `NUM_VC; vc++) begin
 
-    initfc2_np = create_dllp(INITFC2_NP,
-                             3'b000,
-                             ep_fc_nph,
-                             ep_fc_npd);
+      initfc2_p = create_dllp(INITFC2_P,
+                              vc[2:0],
+                              ep_fc_ph[vc],
+                              ep_fc_pd[vc]);
 
-    initfc2_cpl = create_dllp(INITFC2_CPL,
-                              3'b000,
-                              ep_fc_cmplh,
-                              ep_fc_cmpld);
+      initfc2_np = create_dllp(INITFC2_NP,
+                               vc[2:0],
+                               ep_fc_nph[vc],
+                               ep_fc_npd[vc]);
 
-    ep_send_one_dllp(initfc2_p);
-    @(posedge RX_DLL_PCS.CLK);
-    RX_DLL_PCS.dl_tx_valid <= 1'b0;
-    RX_DLL_PCS.dl_packet <= 1'b0;
-    ep_send_one_dllp(initfc2_np);
-    @(posedge RX_DLL_PCS.CLK);
-    RX_DLL_PCS.dl_tx_valid <= 1'b0;
-    RX_DLL_PCS.dl_packet <= 1'b0;
-    ep_send_one_dllp(initfc2_cpl);
-    @(posedge RX_DLL_PCS.CLK);
- RX_DLL_PCS.dl_tx_valid <= 1'b0;
-    RX_DLL_PCS.dl_packet <= 1'b0;
-     
+      initfc2_cpl = create_dllp(INITFC2_CPL,
+                                vc[2:0],
+                                ep_fc_cmplh[vc],
+                                ep_fc_cmpld[vc]);
+
+      ep_send_one_dllp(initfc2_p);
+      @(posedge RX_DLL_PCS.CLK);
+      RX_DLL_PCS.dl_tx_valid <= 1'b0;
+      RX_DLL_PCS.dl_packet <= 1'b0;
+      ep_send_one_dllp(initfc2_np);
+      @(posedge RX_DLL_PCS.CLK);
+      RX_DLL_PCS.dl_tx_valid <= 1'b0;
+      RX_DLL_PCS.dl_packet <= 1'b0;
+      ep_send_one_dllp(initfc2_cpl);
+      @(posedge RX_DLL_PCS.CLK);
+      RX_DLL_PCS.dl_tx_valid <= 1'b0;
+      RX_DLL_PCS.dl_packet <= 1'b0;
+
+    end
+
         ep_initfc2_tx_done = 1'b1;
 
   endtask
+
+  task ep_Updatefc_dllps();
+
+  bit [47:0] updatefc_p;
+  bit [47:0] updatefc_np;
+  bit [47:0] updatefc_cpl;
+
+  // One P/NP/CPL triplet per VC
+  for (int vc = 0; vc < 1; vc++) begin
+
+    updatefc_p = create_dllp(UPDATEFC_P,
+                             vc[2:0],
+                             ep_fc_ph[vc],
+                             ep_fc_pd[vc]);
+
+    updatefc_np = create_dllp(UPDATEFC_NP,
+                              vc[2:0],
+                              ep_fc_nph[vc],
+                              ep_fc_npd[vc]);
+
+    updatefc_cpl = create_dllp(UPDATEFC_CPL,
+                               vc[2:0],
+                               ep_fc_cmplh[vc],
+                               ep_fc_cmpld[vc]);
+
+    ep_send_one_dllp(updatefc_p);
+
+    @(posedge RX_DLL_PCS.CLK);
+    RX_DLL_PCS.dl_tx_valid <= 1'b0;
+    RX_DLL_PCS.dl_packet   <= 1'b0;
+
+    ep_send_one_dllp(updatefc_np);
+
+    @(posedge RX_DLL_PCS.CLK);
+    RX_DLL_PCS.dl_tx_valid <= 1'b0;
+    RX_DLL_PCS.dl_packet   <= 1'b0;
+
+    ep_send_one_dllp(updatefc_cpl);
+
+    @(posedge RX_DLL_PCS.CLK);
+    RX_DLL_PCS.dl_tx_valid <= 1'b0;
+    RX_DLL_PCS.dl_packet   <= 1'b0;
+
+  end
+
+endtask
 
    task EP_ACK_NAK_dllps();
 
@@ -1212,10 +1349,10 @@ task ep_send_initfc2_dllps();
 endtask
 task ep_fc_to_tl();
 
-//ep_fc_received_ev.wait_trigger();
 
 @(posedge RX_TL_DL.CLK);
 
+// Whole-array (all `NUM_VC VCs) forward to the TL layer in one shot
 RX_TL_DL.ep_fc_ph    <= ep_ph_fc;
 RX_TL_DL.ep_fc_pd    <= ep_pd_fc;
 
@@ -1362,11 +1499,37 @@ task ep_tx_recived_packet
     super.run_phase(phase);
 
     case(cfg.mode)
-      RC_MODE: rc_run_phase_body();
-      EP_MODE: ep_run_phase_body();
+       RC_MODE: begin
+        fork
+          rc_run_phase_body();
+          rc_drive_dl_up_thread();
+        join
+      end
+      EP_MODE: begin
+        fork
+          ep_run_phase_body();
+          ep_drive_dl_up_thread();
+        join
+      end
       default: `uvm_fatal("PCIe_DLL_Driver", $sformatf("[%s] Unknown mode", tag))
     endcase
 
+  endtask
+  
+ task rc_drive_dl_up_thread();
+    TX_TL_DL.dl_up <= 1'b0;
+    forever begin
+      @(posedge TX_TL_DL.CLK);
+      TX_TL_DL.dl_up <= rc_dl_up;
+    end
+  endtask
+
+   task ep_drive_dl_up_thread();
+    RX_TL_DL.dl_up <= 1'b0;
+    forever begin
+      @(posedge RX_TL_DL.CLK);
+      RX_TL_DL.dl_up <= ep_dl_up;
+end
   endtask
 
   task rc_run_phase_body();
@@ -1377,12 +1540,22 @@ task ep_tx_recived_packet
 
    TX_TL_DL.tl_rx_data <= 0;
    TX_DLL_PCS.tl_packet  <= 0;
+   TX_DLL_PCS.rc_link_up <= 1'b0;
+
 
    wait(TX_DLL_PCS.RESET);
 
-  rc_dl_state = DL_INACTIVE;
 
   forever begin
+
+  @(posedge TX_DLL_PCS.CLK);
+    // Global link-down handling
+     if(!TX_DLL_PCS.rc_link_up) begin
+       rc_dl_state = DL_INACTIVE;
+
+
+     end
+     else begin
 
   case(rc_dl_state)
 
@@ -1392,9 +1565,15 @@ task ep_tx_recived_packet
 
         DL_INACTIVE:
         begin
-            link_up_env.wait_trigger();
+           // link_up_env.wait_trigger();
+       rc_FL1   = 1'b0;
+       rc_FL2   = 1'b0;
+       rc_dl_up = 1'b0;
+       rc_next_transmit_seq = 1'b0;
+       rc_replay_buffer[rc_rd_ptr].replay_num = 1'b0;
+       rc_aked_seq = 12'hFFF;
 
-          //if(TX_DLL_PCS.phy_link_up)
+          wait(TX_DLL_PCS.rc_link_up)
             `uvm_info("DLCMSM", "RC DLCMSM: DL_INACTIVE -> DL_INIT_FC1", UVM_LOW)
             rc_dl_state = DL_INIT_FC1;
 
@@ -1408,23 +1587,42 @@ DL_INIT_FC1:
 begin
 
   int rc_initfc1_rx_cnt;
-
-  rc_send_initfc1_dllps();
-
-  rc_FL1 = 1'b1;
+  bit rc_initfc1_timeout;
 
   rc_initfc1_rx_cnt = 0;
+  rc_FL1            = 1'b0;
 
-  while (rc_initfc1_rx_cnt < 3) begin
+  rc_send_initfc1_dllps();   // first transmission
+  rc_FL1 = 1'b1;
 
-    rc_rx_pkt_dllp.get(rc_rx_pkt);
+  while (rc_initfc1_rx_cnt < (3 * `NUM_VC)) begin
 
-    wait(rc_rx_pkt.dllp_packet_q.size() > 0);
+    rc_initfc1_timeout = 0;
 
-    rc_initfc1_rx_cnt++;
+    fork
+      begin : rx_wait
+        rc_rx_pkt_dllp.get(rc_rx_pkt);
+        wait(rc_rx_pkt.dllp_packet_q.size() > 0);
+        rc_initfc1_rx_cnt++;
+      end
+      begin : retx_timer
+        #(34us);                     // scale to your timescale/`timeunit
+        rc_initfc1_timeout = 1;
+      end
+    join_any
+    disable fork;
+
+    if (rc_initfc1_timeout) begin
+      `uvm_info("DLCMSM",
+        $sformatf("RC DLCMSM: DL_INIT_FC1 retransmit (rx_cnt=%0d/%0d) - no full triplet set within 34us",
+                   rc_initfc1_rx_cnt, 3 * `NUM_VC),
+        UVM_LOW)
+      rc_send_initfc1_dllps();     // re-issue the full P/NP/CPL set for all VCs
+    end
 
   end
- rc_fc_to_tl();  
+
+  rc_fc_to_tl();
   `uvm_info("DLCMSM", "RC DLCMSM: DL_INIT_FC1 -> DL_INIT_FC2", UVM_LOW)
   rc_dl_state = DL_INIT_FC2;
 
@@ -1438,39 +1636,46 @@ DL_INIT_FC2:
 begin
 
   int rc_initfc2_rx_cnt;
-
-  //--------------------------------------------------
-  // Send INITFC2 DLLPs
-  //--------------------------------------------------
-  rc_send_initfc2_dllps();
-
-  rc_FL2 = 1'b1;
+  bit rc_initfc2_timeout;
 
   rc_initfc2_rx_cnt = 0;
+  rc_FL2            = 1'b0;
 
-  //--------------------------------------------------
-  // Receive 3 INITFC2 DLLPs
-  //--------------------------------------------------
-  while (rc_initfc2_rx_cnt < 3) begin
+  rc_send_initfc2_dllps();
+  rc_FL2 = 1'b1;
 
-    rc_rx_pkt_dllp.get(rc_rx_pkt);
+  while (rc_initfc2_rx_cnt < (3 * `NUM_VC)) begin
 
-    wait(rc_rx_pkt.dllp_packet_q.size() > 0);
+    rc_initfc2_timeout = 0;
 
-    rc_initfc2_rx_cnt++;
+    fork
+      begin : rx_wait
+        rc_rx_pkt_dllp.get(rc_rx_pkt);
+        wait(rc_rx_pkt.dllp_packet_q.size() > 0);
+        rc_initfc2_rx_cnt++;
+      end
+      begin : retx_timer
+        #(34us);
+        rc_initfc2_timeout = 1;
+      end
+    join_any
+    disable fork;
+
+    if (rc_initfc2_timeout) begin
+      `uvm_info("DLCMSM",
+        $sformatf("RC DLCMSM: DL_INIT_FC2 retransmit (rx_cnt=%0d/%0d) - no full triplet set within 34us",
+                   rc_initfc2_rx_cnt, 3 * `NUM_VC),
+        UVM_LOW)
+      rc_send_initfc2_dllps();
+    end
 
   end
 
-  //--------------------------------------------------
-  // INITFC2 completed
-  //--------------------------------------------------
   rc_dl_up = 1'b1;
-
   `uvm_info("DLCMSM", "RC DLCMSM: DL_INIT_FC2 -> DL_ACTIVE", UVM_LOW)
   rc_dl_state = DL_ACTIVE;
 
 end
-
         //////////////////////////////////////////////////////
         // DL_ACTIVE
         //////////////////////////////////////////////////////
@@ -1511,6 +1716,7 @@ begin
           RC_ACK_NAK_dllps();
 
 	  rc_replay_timer();
+ 
 
   join_none
 
@@ -1522,7 +1728,7 @@ end
 
     end
 
-//   end
+   end
   endtask
 
   task ep_run_phase_body();
@@ -1531,28 +1737,28 @@ end
 
    RX_TL_DL.tl_rx_data <= 0;
 
-      RX_DLL_PCS.tl_packet <= 1'b0;
+   RX_DLL_PCS.tl_packet <= 1'b0;
+
+    RX_DLL_PCS.ep_link_up <= 1'b0;
+   
    @(posedge RX_DLL_PCS.CLK);
 
    wait(RX_DLL_PCS.RESET);
 
-  ep_dl_state = EP_DL_INACTIVE;
+//  ep_dl_state = EP_DL_INACTIVE;
 
   forever begin
 
-  //  @(posedge RX_DLL_PCS.CLK);
+    @(posedge RX_DLL_PCS.CLK);
 
-//     // Global link-down handling
-//     if(!RX_DLL_PCS.phy_link_up) begin
+    // Global link-down handling
+      if(!RX_DLL_PCS.ep_link_up) begin
 
-//       ep_dl_state = EP_DL_INACTIVE;
+       ep_dl_state = EP_DL_INACTIVE;
 
-//       ep_FL1   = 1'b0;
-//       ep_FL2   = 1'b0;
-//       ep_dl_up = 1'b0;
 
-//     end
-//     else begin
+     end
+     else begin
 
       case(ep_dl_state)
 
@@ -1562,9 +1768,15 @@ end
 
         EP_DL_INACTIVE:
         begin
-             link_up_env_rx.wait_trigger();
- 
-        //  if(RX_DLL_PCS.phy_link_up)
+         //    link_up_env_rx.wait_trigger();
+       ep_FL1   = 1'b0;
+       ep_FL2   = 1'b0;
+       ep_dl_up = 1'b0;
+       ep_rx_next_transmit_seq = 1'b0;
+       ep_replay_buffer[ep_rd_ptr].ep_replay_num = 1'b0;
+       ep_aked_seq = 12'hFFF;
+
+          wait(RX_DLL_PCS.ep_link_up)
             `uvm_info("DLCMSM", "EP DLCMSM: DL_INACTIVE -> DL_INIT_FC1", UVM_LOW)
             ep_dl_state = EP_DL_INIT_FC1;
 
@@ -1574,33 +1786,50 @@ end
         // DL_INIT_FC1
         //////////////////////////////////////////////////////
 
-        EP_DL_INIT_FC1:
-        begin
+       EP_DL_INIT_FC1:
+begin
 
-          int ep_initfc1_rx_cnt;
+  int ep_initfc1_rx_cnt;
+  bit ep_initfc1_timeout;
 
-          ep_send_initfc1_dllps();
+  ep_initfc1_rx_cnt = 0;
+  ep_FL1            = 1'b0;
 
-	  ep_FL1 = 1'b1;
+  ep_send_initfc1_dllps();   // first transmission
+  ep_FL1 = 1'b1;
 
-          ep_initfc1_rx_cnt = 0;
+  while (ep_initfc1_rx_cnt < (3 * `NUM_VC)) begin
 
-          while(ep_initfc1_rx_cnt < 3) begin
+    ep_initfc1_timeout = 0;
 
-            ep_rx_pkt_dllp.get(ep_rx_pkt);
+    fork
+      begin : rx_wait
+        ep_rx_pkt_dllp.get(ep_rx_pkt);
+        wait(ep_rx_pkt.dllp_packet_rx_q.size() > 0);
+        ep_initfc1_rx_cnt++;
+      end
+      begin : retx_timer
+        #(34us);                    
+	ep_initfc1_timeout = 1;
+      end
+    join_any
+    disable fork;
 
-            wait(ep_rx_pkt.dllp_packet_rx_q.size > 0);
+    if (ep_initfc1_timeout) begin
+      `uvm_info("DLCMSM",
+        $sformatf("EP DLCMSM: EP_DL_INIT_FC1 retransmit (rx_cnt=%0d/%0d) - no full triplet set within 34us",
+                   ep_initfc1_rx_cnt, 3 * `NUM_VC),
+        UVM_LOW)
+      ep_send_initfc1_dllps();     // re-issue the full P/NP/CPL set for all VCs
+    end
 
-            ep_initfc1_rx_cnt++;
+  end
 
-          end
-	   ep_fc_to_tl();
+  ep_fc_to_tl();
+  `uvm_info("DLCMSM", "EP DLCMSM: DL_INIT_FC1 -> DL_INIT_FC2", UVM_LOW)
+  ep_dl_state = EP_DL_INIT_FC2;
 
-            `uvm_info("DLCMSM", "EP DLCMSM: DL_INIT_FC1 -> DL_INIT_FC2", UVM_LOW)
-            ep_dl_state = EP_DL_INIT_FC2;
-
-        end
-
+end
         //////////////////////////////////////////////////////
         // DL_INIT_FC2
         //////////////////////////////////////////////////////
@@ -1609,39 +1838,46 @@ EP_DL_INIT_FC2:
 begin
 
   int ep_initfc2_rx_cnt;
-
-  //------------------------------------------------------
-  // Send INITFC2 DLLPs
-  //------------------------------------------------------
-  ep_send_initfc2_dllps();
-
-  ep_FL2 = 1'b1;
+  bit ep_initfc2_timeout;
 
   ep_initfc2_rx_cnt = 0;
+  ep_FL2            = 1'b0;
 
-  //------------------------------------------------------
-  // Wait for 3 INITFC2 DLLPs
-  //------------------------------------------------------
-  while (ep_initfc2_rx_cnt < 3) begin
+  ep_send_initfc2_dllps();
+  ep_FL2 = 1'b1;
 
-    ep_rx_pkt_dllp.get(ep_rx_pkt);
+  while (ep_initfc2_rx_cnt < (3 * `NUM_VC)) begin
 
-    wait(ep_rx_pkt.dllp_packet_rx_q.size() > 0);
+    ep_initfc2_timeout = 0;
 
-    ep_initfc2_rx_cnt++;
+    fork
+      begin : rx_wait
+        ep_rx_pkt_dllp.get(ep_rx_pkt);
+        wait(ep_rx_pkt.dllp_packet_rx_q.size() > 0);
+        ep_initfc2_rx_cnt++;
+      end
+      begin : retx_timer
+        #(34us);
+        ep_initfc2_timeout = 1;
+      end
+    join_any
+    disable fork;
+
+    if (ep_initfc2_timeout) begin
+      `uvm_info("DLCMSM",
+        $sformatf("EP DLCMSM: EP_DL_INIT_FC2 retransmit (rx_cnt=%0d/%0d) - no full triplet set within 34us",
+                   ep_initfc2_rx_cnt, 3 * `NUM_VC),
+        UVM_LOW)
+      ep_send_initfc2_dllps();
+    end
 
   end
 
-  //------------------------------------------------------
-  // INITFC2 completed -> DL_ACTIVE
-  //------------------------------------------------------
   ep_dl_up = 1'b1;
-
   `uvm_info("DLCMSM", "EP DLCMSM: DL_INIT_FC2 -> EP_DL_ACTIVE", UVM_LOW)
   ep_dl_state = EP_DL_ACTIVE;
 
 end
-
         //////////////////////////////////////////////////////
         // DL_ACTIVE
         //////////////////////////////////////////////////////
@@ -1679,6 +1915,11 @@ end
 	  
 	  ep_replay_timer();
 
+    forever begin
+	    ep_fc_received_ev.wait_trigger();
+	//  ep_Updatefc_dllps();
+  end
+
   join_none
 
   wait(0);
@@ -1688,7 +1929,9 @@ end
       endcase
 
     end
+    end
   endtask
 
 endclass
+
 

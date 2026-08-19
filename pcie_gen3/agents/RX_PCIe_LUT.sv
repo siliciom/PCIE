@@ -129,8 +129,11 @@ class RX_PCIe_LUT extends uvm_component;
           old_word = mem_space[req.addr + (i*4)];
           mem_space[req.addr + (i*4)] = apply_be(old_word, req.payload[i], be);
 
-          fc_mgr.return_credit(req.vc, req.pkt_type, hdr_credit, data_credit);
-        end
+         end
+
+	 fc_mgr.calc_required_credit(req, hdr_credit, data_credit);
+         fc_mgr.return_credit(req.vc, req.pkt_type, hdr_credit, data_credit);
+
       end
 
       else if(is_io_wr) begin
@@ -144,9 +147,9 @@ class RX_PCIe_LUT extends uvm_component;
 
       else if(is_mem_rd) begin
          generate_mem_cpl(req);
-         fc_mgr.calc_required_credit(req, hdr_credit, data_credit);
+         tag_mgr.free_tag(req.tag);
+	 fc_mgr.calc_required_credit(req, hdr_credit, data_credit);
          fc_mgr.return_credit(req.vc, req.pkt_type, hdr_credit, data_credit);
-         tag_mgr.free_tag(cpl.tag);
       end
 
       else if(is_io_rd) begin
@@ -199,13 +202,46 @@ class RX_PCIe_LUT extends uvm_component;
     cfg_model.write_reg(dw_addr, req.payload[0], (req.length == 1) ? req.first_BE : 4'hF);
   endfunction
 
+    function automatic bit [1:0] calc_lower_addr_lsb(bit [3:0] first_be);
+    casez(first_be)
+      4'b???1 : calc_lower_addr_lsb = 2'b00;
+      4'b??10 : calc_lower_addr_lsb = 2'b01;
+      4'b?100 : calc_lower_addr_lsb = 2'b10;
+      4'b1000 : calc_lower_addr_lsb = 2'b11;
+      default : calc_lower_addr_lsb = 2'b00;  // 4'b0000
+    endcase
+  endfunction : calc_lower_addr_lsb
+
   task generate_mem_cpl(Sequence_item req);
     Sequence_item cpl;
     int bytes_remaining, current_addr, byte_count, cpl_bytes, dw_count;
+    bit first_cpl;
+
+      if(req.compl_status != 3'b000) begin
+      cpl = Sequence_item::type_id::create("cpl");
+      cpl.fmt           = 3'b000;      // Completion without Data
+      cpl.r_type        = 5'b01010;
+      cpl.e_type        = CPL;
+      cpl.completer_id  = 16'h0100;
+      cpl.compl_status  = req.compl_status;
+      cpl.bcm           = req.bcm;
+      cpl.byte_count    = 12'h4;
+      cpl.req_id        = req.req_id;
+      cpl.tag           = req.tag;
+      cpl.lower_addr    = 7'h0;
+      cpl.length        = 0;
+      cpl.at            = req.at;
+      cpl.td            = req.td;
+      cpl.pack_tlp();
+
+      cpl_ap.write(cpl);
+      return;
+    end
 
     bytes_remaining = req.length * 4;
     current_addr    = req.addr;
     byte_count      = bytes_remaining;
+    first_cpl       = 1'b1;
 
     while(bytes_remaining > 0) begin
       cpl = Sequence_item::type_id::create("cpl");
@@ -218,7 +254,12 @@ class RX_PCIe_LUT extends uvm_component;
       cpl.byte_count = byte_count;
       cpl.req_id = req.req_id;
       cpl.tag = req.tag;
-      cpl.lower_addr = current_addr[6:0];
+
+      if(first_cpl)
+        cpl.lower_addr = {current_addr[6:2], calc_lower_addr_lsb(req.first_BE)};
+      else
+        cpl.lower_addr = {5'b00000, 2'b00};
+        
 
       cpl_bytes = (bytes_remaining > MAX_CPL_BYTES) ? MAX_CPL_BYTES : bytes_remaining;
       dw_count = cpl_bytes / 4;
@@ -233,9 +274,10 @@ class RX_PCIe_LUT extends uvm_component;
 
       cpl_ap.write(cpl);               // CHANGED: was cpl_fifo.put(cpl);
 
-       bytes_remaining -= cpl_bytes;
+      bytes_remaining -= cpl_bytes;
       byte_count -= cpl_bytes;
       current_addr += cpl_bytes;
+      first_cpl = 1'b0;
     end
   endtask : generate_mem_cpl
 
@@ -302,11 +344,6 @@ class RX_PCIe_LUT extends uvm_component;
 
     cpl = Sequence_item::type_id::create("cpl");
 
-    // NOTE: this used to be built as {ext_register_num, register_num, R4}
-    // (12 bits => dw_addr*4 since R4 is always 0), which did NOT match the
-    // 10-bit {ext_register_num, register_num} index cfg_write() uses - any
-    // register above index 0 was being read from the wrong cell. Both
-    // paths now go through the same dw_addr.
     dw_addr = {req.ext_register_num, req.register_num};
 
     cpl.e_type        = CPL_DATA;
@@ -397,4 +434,6 @@ endfunction
   endfunction : apply_be
     
 endclass : RX_PCIe_LUT
+
+
 

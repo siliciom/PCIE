@@ -2,6 +2,7 @@ package Package;
 `include "uvm_macros.svh"
 import uvm_pkg::*;
 `include "pcie_top_defines.svh"
+`include "../top/apb_defines.svh"
 `include "../sequences/Sequence_item.sv"
 `include "../env/env_config.sv"
 `include "../env/FC_Manager.sv"
@@ -28,6 +29,29 @@ import uvm_pkg::*;
 `include "../agents/PCIe_PMA_Agent.sv"
 `include "../env/TL_Scoreboard.sv"
 `include "../env/Scoreboard_Top.sv"
+`include "../env/DL_Scoreboard.sv"
+`include "../env/pcie_cov.sv"
+
+
+`include "../env/MAC_SB.sv"
+
+`include "../sequences/apb_master_seq_item.sv"
+`include "../agents/apb_master_sequencer.sv"
+`include "../agents/apb_master_driver.sv"
+`include "../agents/apb_master_monitor.sv"
+`include "../agents/apb_master_agent.sv"
+`include "../env/reg_block.sv"
+`include "../env/adapter.sv"
+`include "../sequences/uvm_reg_sequence.sv"
+`include "../sequences/apb_slv_xtn.sv"
+`include "../sequences/apb_slv_seq.sv" 
+`include "../agents/apb_slv_sequencer.sv"
+`include "../agents/apb_slv_driver.sv"
+`include "../agents/apb_slv_monitor.sv"
+`include "../agents/apb_slv_agent.sv"
+//`include "../env/reg_block1.sv"
+//`include "../sequences/uvm_reg_sequence1.sv"
+
 `include "../env/Env_Top.sv"
 `include "../tests/Test.sv"
 endpackage

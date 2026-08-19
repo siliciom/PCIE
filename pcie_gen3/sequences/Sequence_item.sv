@@ -68,6 +68,12 @@ class Sequence_item extends uvm_sequence_item;
   bit [129:0] tx_data_q[`PCIE_NUM_LANES][$];
   static int size_rx_tx[$];
 
+  bit [129:0] pma_rc_tx_q[$];
+  bit [129:0] pma_rc_rx_q[$];
+  bit [129:0] pma_ep_tx_q[$];
+  bit [129:0] pma_ep_rx_q[$];
+
+
   //-----------------------------------------------------------
   // DLL layer fields
   //   Used by TX_DLL_Driver/TX_DLL_Monitor for both RC_MODE and
@@ -88,13 +94,20 @@ class Sequence_item extends uvm_sequence_item;
   bit [31:0] rc_com_data_sb[$];
   bit [31:0] ep_req_data_sb[$];
 
+bit [31:0] rc_dllp_data_sb[$];
+bit [31:0] rc_dllp_packet_sb[$];
+bit [31:0] ep_dllp_data_sb[$];
+bit [31:0] ep_dllp_packet_sb[$];
+
+
+
   // Flow-control credits exchanged via INITFC1/INITFC2 DLLPs
-  bit [7:0]  fc_ph;
-  bit [7:0]  fc_nph;
-  bit [7:0]  fc_cmplh;
-  bit [11:0] fc_pd;
-  bit [11:0] fc_npd;
-  bit [11:0] fc_cmpld;
+  reg [`NUM_VC][8]  fc_ph;
+  reg [`NUM_VC][8]  fc_nph;
+  reg [`NUM_VC][8]  fc_cmplh;
+  reg [`NUM_VC][12] fc_pd;
+  reg [`NUM_VC][12] fc_npd;
+  reg [`NUM_VC][12] fc_cmpld;
 
     bit [7:0]  rc_header_pfc;
   bit [7:0]  rc_header_npfc;
@@ -104,6 +117,7 @@ class Sequence_item extends uvm_sequence_item;
   bit [11:0] rc_data_cmplfc;
 
 bit [3:0] rc_data_type;
+bit [2:0] rc_dllp_vc;
 
     bit [7:0]  ep_header_pfc;
   bit [7:0]  ep_header_npfc;
@@ -113,13 +127,17 @@ bit [3:0] rc_data_type;
   bit [11:0] ep_data_cmplfc;
 
 bit [3:0] ep_data_type;
+bit [2:0] ep_dllp_vc;
 
-bit [7:0]  ep_fc_ph;
-  bit [7:0]  ep_fc_nph;
-  bit [7:0]  ep_fc_cmplh;
-  bit [11:0] ep_fc_pd;
-  bit [11:0] ep_fc_npd;
-  bit [11:0] ep_fc_cmpld;
+bit ep_updated_credits;
+
+
+  reg [`NUM_VC][8]  ep_fc_ph;
+  reg [`NUM_VC][8]  ep_fc_nph;
+  reg [`NUM_VC][8]  ep_fc_cmplh;
+  reg [`NUM_VC][12] ep_fc_pd;
+  reg [`NUM_VC][12] ep_fc_npd;
+  reg [`NUM_VC][12] ep_fc_cmpld;
 
 
   bit [11:0] ep_ack_nak_seq;
@@ -152,7 +170,7 @@ bit [7:0]  ep_fc_ph;
 
   bit [31:0]  tlp_queue_t[$];
   bit [31:0]  tlp_queue[$];
-  bit [127:0] os_t[$];
+  bit [127:0] os_t_lane[`NUM_LANES][$];
 
   // Expected-count handshake fields used by mac_tx_monitor to
   // decide when a full TLP/DLLP burst has been captured.
@@ -822,5 +840,6 @@ endclass : Sequence_item
   
   
   	
+
 
 

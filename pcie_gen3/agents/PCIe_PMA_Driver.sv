@@ -97,10 +97,13 @@ class PCIe_PMA_driver extends uvm_driver#(Sequence_item);
   function void write_port_d(Sequence_item pma_tx);
     `uvm_info("PMA_TX_DRV", $sformatf("[%s] Driving TX packet onto PMA lanes", tag), UVM_LOW)
     pkt_size = pma_tx.tx_data_q[0].size();   // representative lane 0 count
-    for(int lane = 0; lane < cfg.num_lanes; lane++)
-      if(cfg.active_lane_mask[lane])
-        foreach (pma_tx.tx_data_q[lane][i])
-          tx_data_q[lane].push_back(pma_tx.tx_data_q[lane][i]);
+    for (int lane = 0; lane < cfg.num_lanes; lane++) begin
+  if (cfg.active_lane_mask[lane]) begin
+    foreach (pma_tx.tx_data_q[lane][i]) begin
+      tx_data_q[lane].push_back(pma_tx.tx_data_q[lane][i]);
+    end
+  end
+end
     pma_tx.size_tx_rx.push_back(pkt_size);
     `uvm_info("PMA_TX_DRV", $sformatf("[%s] tx_data_q[0] size=%0d", tag, tx_data_q[0].size()), UVM_HIGH)
   endfunction

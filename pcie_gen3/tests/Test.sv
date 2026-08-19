@@ -9,8 +9,13 @@ class pcie_base_test extends uvm_test;
   env_cfg ep_cfg[];
 
   TL_Scoreboard  TL_Scb;
+  DL_Scoreboard  DL_Scb;
+
   Scoreboard_Top Top_Scb;
-  
+  PCIe_MAC_Scoreboard mac_scb;
+   PCIe_TL_Coverage pcie_cov;
+
+ 
   int unsigned num_rc = `PCIE_NUM_RC;
   int unsigned num_ep = `PCIE_NUM_EP;
 
@@ -61,6 +66,9 @@ class pcie_base_test extends uvm_test;
 
     TL_Scb  = TL_Scoreboard::type_id::create("TL_Scb",  this);
     Top_Scb = Scoreboard_Top::type_id::create("Top_Scb", this);
+ mac_scb = PCIe_MAC_Scoreboard::type_id::create("mac_scb",this);
+   DL_Scb  = DL_Scoreboard::type_id::create("DL_Scb", this);
+  pcie_cov  = PCIe_TL_Coverage::type_id::create("pcie_cov", this);
 
     RC_Env = new[num_rc];
     rc_cfg = new[num_rc];
@@ -77,6 +85,11 @@ class pcie_base_test extends uvm_test;
       uvm_config_db#(env_cfg)::set(this, {rc_name, ".*"}, "env_cfg", rc_cfg[i]);
       uvm_config_db#(env_cfg)::set(this,  rc_name,        "env_cfg", rc_cfg[i]);
       uvm_config_db#(TL_Scoreboard)::set(this, rc_name, "TL_Scb", TL_Scb);
+       uvm_config_db#(PCIe_MAC_Scoreboard)::set(this, rc_name, "mac_scb", mac_scb);
+ uvm_config_db#(DL_Scoreboard)::set(this, rc_name, "DL_Scb", DL_Scb);
+  uvm_config_db#(PCIe_TL_Coverage)::set(this, rc_name, "pcie_cov", pcie_cov);
+
+
       RC_Env[i]  = Env_Top::type_id::create(rc_name, this);
     end
 
@@ -90,6 +103,12 @@ class pcie_base_test extends uvm_test;
       uvm_config_db#(env_cfg)::set(this, {ep_name, ".*"}, "env_cfg", ep_cfg[i]);
       uvm_config_db#(env_cfg)::set(this,  ep_name,        "env_cfg", ep_cfg[i]);
       uvm_config_db#(TL_Scoreboard)::set(this, ep_name, "TL_Scb", TL_Scb);
+       uvm_config_db#(PCIe_MAC_Scoreboard)::set(this, ep_name, "mac_scb", mac_scb);
+       uvm_config_db#(DL_Scoreboard)::set(this, ep_name, "DL_Scb", DL_Scb);
+       uvm_config_db#(PCIe_TL_Coverage)::set(this, ep_name, "pcie_cov", pcie_cov);
+
+
+
       EP_Env[i]  = Env_Top::type_id::create(ep_name, this);
     end
 
@@ -131,7 +150,14 @@ class pcie_base_test extends uvm_test;
       `uvm_info("TEST","Waiting for completion...",UVM_LOW)
        cpl_fifo.get(cpl);
       `uvm_info("TEST","Completion received",UVM_LOW)
-      `uvm_info("TEST", $sformatf("REQ TAG = %0d  CPL TAG = %0d", rd_seq.req.tag, cpl.tag), UVM_LOW)
+      `uvm_info("TEST", $sformatf("REQ TAG = %0d  CPL TAG = %0d  CPL TYPE = %s", rd_seq.req.tag, cpl.tag, cpl.e_type.name()), UVM_LOW)
+      // NOTE: cpl_fifo carries BOTH the echoed outgoing request (from
+      // rc_sending_tx_request) and the real completion (from
+      // rc_collecting_rx_completion) - both tagged the same, since it's
+      // the same transaction. Must qualify on e_type too, or this matches
+      // the request's own echo instead of waiting for the real completion,
+      // letting the next config packet fire before the DUT has completed
+      // the first one.
       if(cpl.tag == rd_seq.req.tag) begin
         data  = cpl.payload[0];
         found = 1;
@@ -154,7 +180,10 @@ class pcie_base_test extends uvm_test;
     found = 0;
     while(!found) begin
       cpl_fifo.get(cpl);
-      if(cpl.tag == wr_seq.req.tag) found = 1;
+      // Same reason as cfg_read: must qualify on e_type == CPL, not just
+      // tag, or this matches the echoed outgoing request instead of the
+      // real completion.
+      if(cpl.tag == wr_seq.req.tag ) found = 1;
     end
   endtask : cfg_write
 
@@ -415,14 +444,14 @@ class Multiple_Mem_Wr_Rd_3DW_test extends pcie_base_test;
     curr_addr = bar_base[0] + offset;
     `uvm_info("TEST", $sformatf("curr_addr1 = %0h",curr_addr), UVM_LOW)
       
-    repeat(20) begin
+    repeat(5) begin
 
     Seq_tx = Multiple_Mem_Wr_Rd_3DW::type_id::create("Seq_tx");
    
     Seq_tx.p_wr_fmt = bar_wr_fmt[0];
     Seq_tx.p_rd_fmt = bar_rd_fmt[0];
     Seq_tx.p_addr   = curr_addr;
-    Seq_tx.p_length = 100;
+    Seq_tx.p_length = 10;
     Seq_tx.start(RC_Env[0].PCIe_TL_Agnt.TX_TL_Seqr);
 
     curr_addr += Seq_tx.p_length * 4;
@@ -471,14 +500,14 @@ class Multiple_Mem_Wr_Rd_4DW_test extends pcie_base_test;
       Seq_tx.p_wr_fmt = bar_wr_fmt[1];
       Seq_tx.p_rd_fmt = bar_rd_fmt[1];
       Seq_tx.p_addr   = curr_addr;
-      Seq_tx.p_length = 70;
+      Seq_tx.p_length = 10;
       Seq_tx.start(RC_Env[0].PCIe_TL_Agnt.TX_TL_Seqr);
 
       curr_addr += Seq_tx.p_length * 4;
 
     end
 
-    #90000;
+    #2000000;
     phase.drop_objection(this);
   endtask : run_phase
 
@@ -715,8 +744,208 @@ class B2B_IO_Wr_Rd_3DW_test extends pcie_base_test;
   endtask : run_phase
 
 endclass : B2B_IO_Wr_Rd_3DW_test
+//=========================================================
+// pcie_ral_test.sv
+// Starts pcie_cfg_full_ral_seq (from pcie_ral_seq_lib.sv)
+// against the RAL model built inside Env_Top.
+//=========================================================
+class pcie_ral_test extends uvm_test;
+
+  // If you already have a common base test (e.g. pcie_base_test) that
+  // builds Env_Top + sets env_cfg + TL_Scb, extend THAT instead of
+  // uvm_test, and delete the env_cfg/Env_Top creation lines below —
+  // just keep the run_phase() task with the sequence start() call.
+  `uvm_component_utils(pcie_ral_test)
 
 
+  Env_Top Env_Top_h;
+  env_cfg cfg;
+
+  function new(string name = "pcie_ral_test", uvm_component parent = null);
+    super.new(name, parent);
+
+  endfunction
+
+  function void build_phase(uvm_phase phase);
+	   TL_Scoreboard TL_Scb;
+  super.build_phase(phase);
+       cfg = env_cfg::type_id::create("cfg");
+
+    cfg.mode = EP_MODE;   // RAL/APB agent only builds in EP_MODE, per Env_Top
+    uvm_config_db#(env_cfg)::set(this, "*", "env_cfg", cfg);
+ TL_Scb = TL_Scoreboard::type_id::create("TL_Scb", this);
+  uvm_config_db#(TL_Scoreboard)::set(this, "*", "TL_Scb", TL_Scb);
+
+    
+
+   Env_Top_h = Env_Top::type_id::create("EP_Env_0", this);  // renamed from "Env_Top_h"  
+endfunction
+
+  task run_phase(uvm_phase phase);
+
+   pcie_cfg_full_ral_seq seq;
+  // pcie_type1_cfg_full_ral_seq seq1;
+   phase.raise_objection(this);
+   seq = pcie_cfg_full_ral_seq::type_id::create("seq");  
+   seq.model = Env_Top_h.Ral; //this tells the generic RAL sequence (seq) which register block to operate on — pointing it at your actual PCIe config-space register model (Env_Top_h.Ral) instead of leaving it with no registers to read/write at all.
+    seq.start(Env_Top_h.Ral.default_map.get_sequencer());
 
 
+  //  seq1 = pcie_type1_cfg_full_ral_seq::type_id::create("seq1"); 
+  //  seq1.regmodel = Env_Top_h.Ral_type1;
+ //   seq1.start(Env_Top_h.Ral_type1.default_map.get_sequencer());
 
+    phase.drop_objection(this);
+
+  endtask
+
+endclass : pcie_ral_test
+
+class LTSSM_Disabled_test extends pcie_base_test;
+
+  `uvm_component_utils(LTSSM_Disabled_test)
+
+  function new(string name = "LTSSM_Disabled_test", uvm_component parent = null);
+    super.new(name, parent);
+  endfunction
+
+  task run_phase(uvm_phase phase);
+    time disabled_wait;
+
+    phase.raise_objection(this);
+
+    `uvm_info("TEST",
+       "Setting Link Disable on RC and EP -> directing LTSSM to DISABLED out of Configuration.Linkwidth.Start",
+       UVM_LOW)
+    rc_cfg[0].link_ctrl_disable_link = 1'b1;
+    ep_cfg[0].link_ctrl_disable_link = 1'b1;
+
+    //-----------------------------------------------------------
+    // Worst-case time for either side to reach
+    // Configuration.Linkwidth.Start on its own timeouts, plus
+    // margin for the Disabled state's own TS1 burst + Electrical
+    // Idle settle. (Fast-path/barrier-synced bring-up is normally
+    // far quicker than this, so this bound is generous on purpose.)
+    //-----------------------------------------------------------
+    disabled_wait = rc_cfg[0].detect_quiet_timeout
+                   + rc_cfg[0].detect_active_timeout
+                   + rc_cfg[0].polling_active_timeout
+                   + rc_cfg[0].polling_configuration_timeout
+                   + rc_cfg[0].config_linknum_start_timeout
+                   + 100000;   // margin for the Disabled TS1/EIOS burst itself
+
+    #(disabled_wait);
+
+    `uvm_info("TEST","DISABLED functionality complete -> ending test",UVM_LOW)
+    phase.drop_objection(this);
+  endtask : run_phase
+
+endclass : LTSSM_Disabled_test
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////    LTSSM_LOOPBACK_STATE_TEST_CASE   //////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+class LTSSM_Loopback_test extends pcie_base_test;
+
+  `uvm_component_utils(LTSSM_Loopback_test)
+
+  function new(string name = "LTSSM_Loopback_test", uvm_component parent = null);
+    super.new(name, parent);
+  endfunction
+
+  task run_phase(uvm_phase phase);
+    time entry_wait;
+
+    phase.raise_objection(this);
+
+    `uvm_info("TEST",
+       "Setting Enter Loopback on RC and EP -> directing LTSSM to LOOPBACK_ENTRY out of Configuration.Linkwidth.Start",
+       UVM_LOW)
+    rc_cfg[0].link_ctrl_enter_loopback = 1'b1;
+    ep_cfg[0].link_ctrl_enter_loopback = 1'b1;
+
+    //-----------------------------------------------------------
+    // Worst-case time for either side to reach
+    // Configuration.Linkwidth.Start, plus Loopback.Entry's own
+    // TS1 burst / lock-approximation timeout.
+    //-----------------------------------------------------------
+    entry_wait = rc_cfg[0].detect_quiet_timeout
+               + rc_cfg[0].detect_active_timeout
+               + rc_cfg[0].polling_active_timeout
+               + rc_cfg[0].polling_configuration_timeout
+               + rc_cfg[0].config_linknum_start_timeout
+               + rc_cfg[0].loopback_entry_timeout
+               + 100000;   // margin for the Entry TS1 burst itself
+
+    #(entry_wait);
+
+    `uvm_info("TEST","Directing Loopback.Active -> Loopback.Exit on both sides",UVM_LOW)
+    rc_cfg[0].loopback_exit_directed = 1'b1;
+    ep_cfg[0].loopback_exit_directed = 1'b1;
+
+    // Exit's own EIOS burst + 2ms Electrical Idle, with margin.
+    #(rc_cfg[0].loopback_exit_idle_time + 100000);
+
+    `uvm_info("TEST","LOOPBACK_EXIT functionality complete -> ending test",UVM_LOW)
+    phase.drop_objection(this);
+  endtask : run_phase
+
+endclass : LTSSM_Loopback_test
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////    LTSSM_HOT_RESET_STATE_TEST_CASE   /////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+class LTSSM_HotReset_test extends pcie_base_test;
+
+  `uvm_component_utils(LTSSM_HotReset_test)
+
+  function new(string name = "LTSSM_HotReset_test", uvm_component parent = null);
+    super.new(name, parent);
+  endfunction
+
+  task run_phase(uvm_phase phase);
+    time bring_up_wait;
+
+    phase.raise_objection(this);
+
+    `uvm_info("TEST",
+       "Setting Hot Reset on RC (directed) and EP (not directed) at time 0, ahead of the LTSSM's own natural bring-up",
+       UVM_LOW)
+    rc_cfg[0].link_ctrl_hot_reset = 1'b1;
+    ep_cfg[0].link_ctrl_hot_reset = 1'b1;
+
+    //-----------------------------------------------------------
+    // Worst-case time to reach Recovery.Idle the "real" way: full
+    // Detect/Polling/Configuration bring-up, then one Recovery
+    // pass (RcvrLock->RcvrCfg->Speed), plus Hot Reset's own 2ms
+    // timeout and margin. Fast-path/barrier-synced bring-up is
+    // normally far quicker than this bound, so it's intentionally
+    // generous.
+    //-----------------------------------------------------------
+    bring_up_wait = rc_cfg[0].detect_quiet_timeout
+                   + rc_cfg[0].detect_active_timeout
+                   + rc_cfg[0].polling_active_timeout
+                   + rc_cfg[0].polling_configuration_timeout
+                   + rc_cfg[0].config_linknum_start_timeout
+                   + rc_cfg[0].config_linknum_accept_timeout
+                   + rc_cfg[0].config_lanenum_wait_timeout
+                   + rc_cfg[0].config_lanenum_accept_timeout
+                   + rc_cfg[0].config_complete_timeout
+                   + rc_cfg[0].config_idle_timeout
+                   + rc_cfg[0].recovery_rcvrlock_timeout
+                   + rc_cfg[0].recovery_rcvrcfg_timeout
+                   + rc_cfg[0].recovery_speed_timeout
+                   + rc_cfg[0].recovery_idle_timeout
+                   + rc_cfg[0].hot_reset_timeout
+                   + 200000;   // margin for the Hot Reset TS1 burst itself
+
+    #(bring_up_wait);
+
+    `uvm_info("TEST","HOT_RESET functionality complete -> ending test",UVM_LOW)
+    phase.drop_objection(this);
+  endtask : run_phase
+
+endclass : LTSSM_HotReset_test

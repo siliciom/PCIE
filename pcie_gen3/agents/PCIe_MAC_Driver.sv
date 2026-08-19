@@ -24,6 +24,7 @@ class PCIe_MAC_driver extends uvm_driver #(Sequence_item);
   Sequence_item rc_item;
   bit [31:0]  rc_received_tlp[$];
   bit [127:0] rc_received_os[$];
+  bit [127:0] rc_received_os_lane[`PCIE_NUM_LANES][$];
   bit [31:0]  rc_received [$];
   bit [129:0] rc_encoded_OS;
   bit [7:0]   rc_link_num;
@@ -44,6 +45,7 @@ class PCIe_MAC_driver extends uvm_driver #(Sequence_item);
 
   Sequence_item ep_item;
   bit [127:0] ep_os[$];
+  bit [127:0] ep_os_lane[`PCIE_NUM_LANES][$];
   bit [31:0]  ep_received_tlp[$];
   bit [31:0]  ep_tlp_fifo[$][$];   // FIFO of buffered TLPs: each entry is one full TLP (queue of DWORDs).
                                    // write_port_h() pushes new arrivals here instead of overwriting
@@ -62,6 +64,23 @@ class PCIe_MAC_driver extends uvm_driver #(Sequence_item);
   int         ep_size_dllp;
   bit [7:0]   ep_link_num = 8'h00;
   bit [7:0]   ep_lane_num = 8'h00;
+  bit [7:0]   ep_negotiated_link_num = 8'h00;
+  bit [7:0]   ep_negotiated_lane_num = 8'h00;
+  bit [7:0]   rc_idle_to_rlock_transitioned = 8'h00;
+  bit [7:0]   ep_idle_to_rlock_transitioned = 8'h00;
+
+
+ bit          rc_directed_speed_change  = 1'b0;
+  bit          rc_changed_speed_recovery = 1'b0;
+  int unsigned rc_gen_on_recovery_entry  = 1;
+  bit          rc_successful_speed_negotiation = 1'b0;
+  bit          rc_recovery_idle_via_rcvrcfg_timeout = 1'b0;
+
+  bit          ep_directed_speed_change  = 1'b0;
+  bit          ep_changed_speed_recovery = 1'b0;
+  int unsigned ep_gen_on_recovery_entry  = 1;
+  bit          ep_successful_speed_negotiation = 1'b0;
+  bit          ep_recovery_idle_via_rcvrcfg_timeout = 1'b0;
 
   bit [22:0] polynomial = 23'h1DBFBC;
   bit [15:0] SDP = 16'hF0AC;
@@ -96,21 +115,27 @@ class PCIe_MAC_driver extends uvm_driver #(Sequence_item);
   uvm_barrier config_idle;
   uvm_barrier lo;
 
+
   typedef enum {
     DETECT_QUIET, DETECT_ACTIVE, POLLING_ACTIVE, POLLING_COMPLIANCE,
     POLLING_CONFIGURATION, CONFIG_LINKNUM_START, CONFIG_LINKNUM_ACCEPT,
     CONFIG_LANNUM_WAIT, CONFIG_LANENUM_ACCEPT, CONFIG_COMPLETE,
     CONFIG_IDLE, L0,
-    RECOVERY_RCVRLOCK, RECOVERY_RCVRCFG, RECOVERY_SPEED, RECOVERY_IDLE
+    RECOVERY_RCVRLOCK, RECOVERY_RCVRCFG, RECOVERY_SPEED, RECOVERY_IDLE,
+    DISABLED,
+    LOOPBACK_ENTRY, LOOPBACK_ACTIVE, LOOPBACK_EXIT,
+    HOT_RESET
   } rc_ltssm_state_e;
   rc_ltssm_state_e rc_state;
-
   typedef enum {
     EP_DETECT_QUIET, EP_DETECT_ACTIVE, EP_POLLING_ACTIVE, EP_POLLING_COMPLIANCE,
     EP_POLLING_CONFIGURATION, EP_CONFIG_LINKNUM_START, EP_CONFIG_LINKNUM_ACCEPT,
     EP_CONFIG_LANNUM_WAIT, EP_CONFIG_LANENUM_ACCEPT, EP_CONFIG_COMPLETE,
     EP_CONFIG_IDLE, EP_L0,
-    EP_RECOVERY_RCVRLOCK, EP_RECOVERY_RCVRCFG, EP_RECOVERY_SPEED, EP_RECOVERY_IDLE
+    EP_RECOVERY_RCVRLOCK, EP_RECOVERY_RCVRCFG, EP_RECOVERY_SPEED, EP_RECOVERY_IDLE,
+    EP_DISABLED,
+    EP_LOOPBACK_ENTRY, EP_LOOPBACK_ACTIVE, EP_LOOPBACK_EXIT,
+    EP_HOT_RESET
   } ep_ltssm_state_e;
   ep_ltssm_state_e ep_state;
 
@@ -208,20 +233,20 @@ class PCIe_MAC_driver extends uvm_driver #(Sequence_item);
       RC_MODE: begin
         // RC's original thresholds (all 2)
         polling_active.set_threshold(1);
-        polling_compilance.set_threshold(2);
-        polling_configuration.set_threshold(2);
-        config_link_start.set_threshold(2);
-        config_link_accept.set_threshold(2);
-        config_lane_wait.set_threshold(2);
-        config_lane_accept.set_threshold(2);
-        config_complete.set_threshold(2);
-        config_idle.set_threshold(2);
+        polling_compilance.set_threshold(1);
+        polling_configuration.set_threshold(1);
+        config_link_start.set_threshold(1);
+        config_link_accept.set_threshold(1);
+        config_lane_wait.set_threshold(1);
+        config_lane_accept.set_threshold(1);
+        config_complete.set_threshold(1);
+        config_idle.set_threshold(1);
         lo.set_threshold(2);
 
-        recovery_rcvrlock.set_threshold(2);
-        recovery_rcvrcfg.set_threshold(2);
-        recovery_speed.set_threshold(2);
-        recovery_idle_bar.set_threshold(2);
+        recovery_rcvrlock.set_threshold(1);
+        recovery_rcvrcfg.set_threshold(1);
+        recovery_speed.set_threshold(1);
+        recovery_idle_bar.set_threshold(1);
 
         if(!uvm_config_db#(virtual TX_DLL_PCS_Interface)::get(this, "", "DLL_Vif", rc_vif))
           `uvm_fatal("NO_VIF", $sformatf("[%s] TX_DLL_PCS_Interface not set (DLL_Vif missing)", tag))
@@ -235,18 +260,18 @@ class PCIe_MAC_driver extends uvm_driver #(Sequence_item);
         // EP's original thresholds (1 for polling_active/polling_compilance, 2 elsewhere)
         polling_active.set_threshold(1);
         polling_compilance.set_threshold(1);
-        polling_configuration.set_threshold(2);
-        config_link_start.set_threshold(2);
-        config_link_accept.set_threshold(2);
-        config_lane_wait.set_threshold(2);
-        config_lane_accept.set_threshold(2);
-        config_complete.set_threshold(2);
-        config_idle.set_threshold(2);
+        polling_configuration.set_threshold(1);
+        config_link_start.set_threshold(1);
+        config_link_accept.set_threshold(1);
+        config_lane_wait.set_threshold(1);
+        config_lane_accept.set_threshold(1);
+        config_complete.set_threshold(1);
+        config_idle.set_threshold(1);
 
-        recovery_rcvrlock.set_threshold(2);
-        recovery_rcvrcfg.set_threshold(2);
-        recovery_speed.set_threshold(2);
-        recovery_idle_bar.set_threshold(2);
+        recovery_rcvrlock.set_threshold(1);
+        recovery_rcvrcfg.set_threshold(1);
+        recovery_speed.set_threshold(1);
+        recovery_idle_bar.set_threshold(1);
 
         if(!uvm_config_db#(virtual pipe_rx_interface)::get(this, "", "pipe_Vif", ep_pvif))
           `uvm_fatal("NO_VIF", $sformatf("[%s] pipe_rx_interface not set (pipe_Vif missing)", tag))
@@ -278,7 +303,7 @@ class PCIe_MAC_driver extends uvm_driver #(Sequence_item);
   endfunction
 
   function void write_port_f(Sequence_item t);
-    rc_received_os = t.os_t;
+    rc_received_os_lane = t.os_t_lane;
       `uvm_info("MAC_TX_DRV", $sformatf("RC_ORDERED_SETS %0d DWORDs",rc_received_os.size()), UVM_HIGH)
     if(t.tlp_queue.size()>0) 
        rc_tlp_fifo.push_back(t.tlp_queue);
@@ -304,7 +329,7 @@ class PCIe_MAC_driver extends uvm_driver #(Sequence_item);
   endfunction
 
   function void write_port_h(Sequence_item t);
-    ep_os = t.os_t;
+    ep_os_lane = t.os_t_lane;
       `uvm_info("MAC_TX_DRV", $sformatf("ORDERED_SETS %0d DWORDs",ep_os.size()), UVM_HIGH)
     if(t.tlp_queue_t.size() > 0)
       ep_tlp_fifo.push_back(t.tlp_queue_t);
@@ -386,10 +411,39 @@ class PCIe_MAC_driver extends uvm_driver #(Sequence_item);
     endcase
   endfunction
 
-  function bit [127:0] tag_ts1(bit [127:0] base_ts, bit speed_change = 1'b0);
+  //-----------------------------------------------------------
+  // PAD value for un-assigned Link/Lane numbers (spec: all-1s).
+  //-----------------------------------------------------------
+  localparam bit [7:0] PAD_VAL = 8'hFF;
+
+  // tag_ts1() / tag_ts2() - single generic field-stamping function
+  // used by every Configuration/Recovery substate that needs to
+  // embed rate_id and/or Link/Lane numbers into a TS1 or TS2 base
+  // Ordered Set. link_num/lane_num default to PAD so callers that
+  // don't care about them (e.g. POLLING_ACTIVE, Recovery.RcvrLock)
+  // can omit them entirely and behave exactly as before.
+   function bit [127:0] tag_ts1(bit [127:0] base_ts, bit speed_change = 1'b0,
+                                bit [7:0] link_num = PAD_VAL, bit [7:0] lane_num = PAD_VAL,
+                                bit disable_link = 1'b0, bit loopback = 1'b0,
+                                bit hot_reset = 1'b0);
     bit [127:0] ts = base_ts;
-    ts[95:88] = rate_id_byte(cfg.gen, speed_change);
-    tag_ts1   = ts;
+    ts[95:88]   = rate_id_byte(cfg.gen, speed_change);
+    ts[111:104] = link_num;   // TODO: confirm TS1 Link Number byte offset
+                               // against real PIPE/spec Symbol mapping
+    ts[119:112] = lane_num;   // TODO: confirm TS1 Lane Number byte offset
+    ts[80]      = hot_reset;      // Symbol 5 (Training Control), bit 0 = Hot Reset
+    ts[81]      = disable_link;   // Symbol 5 (Training Control), bit 1 = Disable Link
+    ts[82]      = loopback;       // Symbol 5 (Training Control), bit 2 = Loopback
+    tag_ts1     = ts;
+  endfunction
+   
+  function bit [127:0] tag_ts2(bit [127:0] base_ts, bit speed_change = 1'b0,
+                                bit [7:0] link_num = PAD_VAL, bit [7:0] lane_num = PAD_VAL);
+    bit [127:0] ts = base_ts;
+    ts[95:88]   = rate_id_byte(cfg.gen, speed_change);
+    ts[111:104] = link_num;   // TODO: confirm TS2 Link Number byte offset
+    ts[119:112] = lane_num;   // TODO: confirm TS2 Lane Number byte offset
+    tag_ts2     = ts;
   endfunction
 
    function void rc_packet_encoding();
@@ -420,11 +474,60 @@ localparam int NUM_LANES = 32;
 localparam bit [1:0] SYNC_HDR = 2'b01;
 
 
-bit [7:0]   rc_striped_lanes[NUM_LANES][$];
-bit [129:0] rc_lane_word[NUM_LANES];
+bit [7:0]   rc_striped_lanes[`PCIE_NUM_LANES][$];
+bit [129:0] rc_lane_word[`PCIE_NUM_LANES];
 
 // --- striping task fills a queue per lane instead of a single word ---
-bit [129:0] rc_lane_word_q[NUM_LANES][$];   // one queue entry per 16B block
+bit [129:0] rc_lane_word_q[`PCIE_NUM_LANES][$];// one queue entry per 16B block
+localparam bit [22:0] RC_LANE_SEED[8] = '{
+    23'h1DBFBC,  // Lane 0 mod 8
+    23'h0607BB,  // Lane 1 mod 8
+    23'h1EC760,  // Lane 2 mod 8
+    23'h18C0DB,  // Lane 3 mod 8
+    23'h010F12,  // Lane 4 mod 8
+    23'h19CFC9,  // Lane 5 mod 8
+    23'h0277CE,  // Lane 6 mod 8
+    23'h1BB807    // Lane 7 mod 8
+};
+
+// Forces every lane's LFSR back to its RC_LANE_SEED[lane%8] reset value.
+// (Drives the reset path inside rc_lane_scramble_byte() below, since the
+// LFSR itself lives in that function's static storage.)
+function void rc_lane_scr_reset();
+    bit [7:0] dummy;
+    for (int lane = 0; lane < `PCIE_NUM_LANES; lane++)
+        dummy = rc_lane_scramble_byte(lane, dummy, 1'b1);
+endfunction
+
+// Scrambles a single byte on the given lane, advancing that lane's
+// LFSR by 8 bits. lfsr[] is a function-local static array (same
+// static-storage pattern as rc_d_s()'s lfsr above), sized by
+// `PCIE_NUM_LANES` and lazily seeded from RC_LANE_SEED[lane%8] on
+// first call (an assignment-pattern literal can't be used here since
+// its element count would have to be hardcoded independently of the
+// `PCIE_NUM_LANES macro). Free-runs from there; pass rst=1 (see
+// rc_lane_scr_reset()) to force a lane back to its seed without
+// scrambling a byte.
+
+function bit [7:0] rc_lane_scramble_byte(input int lane, inout bit [7:0] data, input bit rst = 1'b0);
+    static bit [22:0] lfsr[`PCIE_NUM_LANES];
+    static bit        seeded = 1'b0;
+    if (!seeded) begin
+        for (int l = 0; l < `PCIE_NUM_LANES; l++)
+            lfsr[l] = RC_LANE_SEED[l % 8];
+        seeded = 1'b1;
+    end
+    if (rst) begin
+        lfsr[lane] = RC_LANE_SEED[lane % 8];
+        return data;
+    end
+    for (int i = 0; i < 8; i++) begin
+        if (lfsr[lane][22]) lfsr[lane] = (lfsr[lane] << 1) ^ polynomial;
+        else                lfsr[lane] = (lfsr[lane] << 1);
+        data[i] = lfsr[lane][22] ^ data[i];
+    end
+    return data;
+endfunction
 
 task rc_byte_striping(input bit [31:0] rc_received[$]);
     bit [7:0] payload_bytes[$];
@@ -448,7 +551,7 @@ task rc_byte_striping(input bit [31:0] rc_received[$]);
     total_bytes = payload_bytes.size();
     num_rounds  = (total_bytes + cfg.num_lanes - 1) / cfg.num_lanes;
 
-    for (int lane = 0; lane < NUM_LANES; lane++) begin
+    for (int lane = 0; lane < `PCIE_NUM_LANES; lane++) begin
         rc_striped_lanes[lane].delete();
         rc_lane_word_q[lane].delete();
     end
@@ -469,8 +572,9 @@ task rc_byte_striping(input bit [31:0] rc_received[$]);
             payload = '0;
             for (int r = 0; r < 16; r++) begin
                 int idx = blk*16 + r;
-                if (idx < rc_striped_lanes[lane].size())
-                    payload[127-r*8 -: 8] = rc_striped_lanes[lane][idx];
+                bit [7:0] raw_byte;
+                raw_byte = (idx < rc_striped_lanes[lane].size()) ? rc_striped_lanes[lane][idx] : 8'h00;
+                payload[127-r*8 -: 8] = rc_lane_scramble_byte(lane, raw_byte);
             end
             rc_lane_word_q[lane].push_back({2'b10, payload});
             `uvm_info("TX_BYTE_STRIPE",
@@ -490,7 +594,7 @@ task rc_drive_striped_data();
       UVM_LOW)
 
     for (int blk = 0; blk < num_blocks; blk++) begin
-        @(posedge rc_pvif.PCLK);
+         if(blk != 0) @(posedge rc_pvif.PCLK);
         for (int lane = 0; lane < cfg.num_lanes; lane++) begin
             rc_pvif.TxData[lane]      <= rc_lane_word_q[lane][blk];
             rc_pvif.TxDataValid[lane] <= 1;
@@ -629,6 +733,30 @@ function void rc_add_stp_to_all_packets(inout bit [31:0] pkt_q[$]);
      while(($time - start_time) < timeout)
         @(posedge ep_pvif.PCLK);
   endtask
+ function automatic bit rc_os_all_lanes_ready(int unsigned min_count = 1);
+     rc_os_all_lanes_ready = 1'b1;
+     for (int lane = 0; lane < cfg.num_lanes; lane++)
+        if (rc_received_os_lane[lane].size() < min_count)
+           rc_os_all_lanes_ready = 1'b0;
+  endfunction
+
+  function automatic bit ep_os_all_lanes_ready(int unsigned min_count = 1);
+     ep_os_all_lanes_ready = 1'b1;
+     for (int lane = 0; lane < cfg.num_lanes; lane++)
+        if (ep_os_lane[lane].size() < min_count)
+           ep_os_all_lanes_ready = 1'b0;
+  endfunction
+
+  function automatic void rc_os_lane_delete();
+     for (int lane = 0; lane < cfg.num_lanes; lane++)
+        rc_received_os_lane[lane].delete();
+  endfunction
+
+  function automatic void ep_os_lane_delete();
+     for (int lane = 0; lane < cfg.num_lanes; lane++)
+        ep_os_lane[lane].delete();
+  endfunction
+
 
   //-----------------------------------------------------------
   // Receiver Detection (Detect.Active) - per active lane:
@@ -750,11 +878,65 @@ function void rc_add_stp_to_all_packets(inout bit [31:0] pkt_q[$]);
     end
     `uvm_info("PIPE_DRV",$sformatf("data: %0p",ep_trans_data),UVM_HIGH)
   endfunction
-bit [129:0] ep_lane_word[NUM_LANES];
-bit [7:0] ep_striped_lanes[NUM_LANES][$];
+bit [129:0] ep_lane_word[`PCIE_NUM_LANES];
+bit [7:0] ep_striped_lanes[`PCIE_NUM_LANES][$];
 
-bit [129:0] ep_lane_word_q[NUM_LANES][$];   // one queue entry per 16B block
+bit [129:0] ep_lane_word_q[`PCIE_NUM_LANES][$];   // one queue entry per 16B block
 
+//-----------------------------------------------------------
+// Per-lane scrambler for the EP side - mirrors the RC-side
+// scrambler above. Same seed table (PCIe Base Spec: lane seed
+// is a function of lane number mod 8), independent LFSR state
+// per lane, free-runs across calls unless explicitly reset.
+//-----------------------------------------------------------
+localparam bit [22:0] EP_LANE_SEED[8] = '{
+    23'h1DBFBC,  // Lane 0 mod 8
+    23'h0607BB,  // Lane 1 mod 8
+    23'h1EC760,  // Lane 2 mod 8
+    23'h18C0DB,  // Lane 3 mod 8
+    23'h010F12,  // Lane 4 mod 8
+    23'h19CFC9,  // Lane 5 mod 8
+    23'h0277CE,  // Lane 6 mod 8
+    23'h1BB807    // Lane 7 mod 8
+};
+
+// Forces every lane's LFSR back to its EP_LANE_SEED[lane%8] reset value.
+// (Drives the reset path inside ep_lane_scramble_byte() below, since the
+// LFSR itself lives in that function's static storage.)
+function void ep_lane_scr_reset();
+    bit [7:0] dummy;
+    for (int lane = 0; lane < `PCIE_NUM_LANES; lane++)
+        dummy = ep_lane_scramble_byte(lane, dummy, 1'b1);
+endfunction
+
+// Scrambles a single byte on the given lane, advancing that lane's
+// LFSR by 8 bits. lfsr[] is a function-local static array (same
+// static-storage pattern as ep_d_s()'s lfsr above), sized by
+// `PCIE_NUM_LANES` and lazily seeded from EP_LANE_SEED[lane%8] on
+// first call (an assignment-pattern literal can't be used here since
+// its element count would have to be hardcoded independently of the
+// `PCIE_NUM_LANES macro). Free-runs from there; pass rst=1 (see
+// ep_lane_scr_reset()) to force a lane back to its seed without
+// scrambling a byte.
+function bit [7:0] ep_lane_scramble_byte(input int lane, inout bit [7:0] data, input bit rst = 1'b0);
+    static bit [22:0] lfsr[`PCIE_NUM_LANES];
+    static bit        seeded = 1'b0;
+    if (!seeded) begin
+        for (int l = 0; l < `PCIE_NUM_LANES; l++)
+            lfsr[l] = EP_LANE_SEED[l % 8];
+        seeded = 1'b1;
+    end
+    if (rst) begin
+        lfsr[lane] = EP_LANE_SEED[lane % 8];
+        return data;
+    end
+    for (int i = 0; i < 8; i++) begin
+        if (lfsr[lane][22]) lfsr[lane] = (lfsr[lane] << 1) ^ polynomial;
+        else                lfsr[lane] = (lfsr[lane] << 1);
+        data[i] = lfsr[lane][22] ^ data[i];
+    end
+    return data;
+endfunction
 task ep_byte_striping(input bit [31:0] ep_received[$]);
     bit [7:0] payload_bytes[$];
     bit [127:0] payload;
@@ -777,7 +959,7 @@ task ep_byte_striping(input bit [31:0] ep_received[$]);
     total_bytes = payload_bytes.size();
     num_rounds  = (total_bytes + cfg.num_lanes - 1) / cfg.num_lanes;
 
-    for (int lane = 0; lane < NUM_LANES; lane++) begin
+    for (int lane = 0; lane < `PCIE_NUM_LANES; lane++) begin
         ep_striped_lanes[lane].delete();
         ep_lane_word_q[lane].delete();
     end
@@ -798,8 +980,9 @@ task ep_byte_striping(input bit [31:0] ep_received[$]);
             payload = '0;
             for (int r = 0; r < 16; r++) begin
                 int idx = blk*16 + r;
-                if (idx < ep_striped_lanes[lane].size())
-                    payload[127-r*8 -: 8] = ep_striped_lanes[lane][idx];
+                 bit [7:0] raw_byte;
+                raw_byte = (idx < ep_striped_lanes[lane].size()) ? ep_striped_lanes[lane][idx] : 8'h00;
+                payload[127-r*8 -: 8] = ep_lane_scramble_byte(lane, raw_byte);
             end
             ep_lane_word_q[lane].push_back({2'b10, payload});
             `uvm_info("EP_BYTE_STRIPE",
@@ -1104,7 +1287,7 @@ endtask
      barrier_met      = 0;
      timeout_occured  = 0;
      enter_compliance = 0;
-     rc_received_os.delete();
+     rc_os_lane_delete();
 
      fork
 
@@ -1139,7 +1322,7 @@ endtask
         // stall this branch afterwards while the timeout races on.
         //--------------------------------------------------------
         begin
-           wait(rc_received_os.size() > 7);
+           wait(rc_os_all_lanes_ready(7));
       `uvm_info("MAC_TX_DRV", $sformatf(" wait_completetd RC_ORDERED_SETS %0d DWORDs",rc_received_os.size()), UVM_LOW)
           // wait(ts1_sent_count > 9);
 
@@ -1164,7 +1347,7 @@ endtask
      if(enter_compliance)
      begin
         `uvm_info("TX_LTSSM","Enter Compliance bit set during POLLING_ACTIVE -> POLLING_COMPLIANCE",UVM_LOW)
-        rc_received_os.delete();
+        rc_os_lane_delete();
         rc_state = POLLING_COMPLIANCE;
         return;
      end
@@ -1172,7 +1355,7 @@ endtask
      if(barrier_met)
      begin
 
-        rc_partner_rate_id = rc_received_os[0][95:88];
+        rc_partner_rate_id = rc_received_os_lane[0][0][95:88];
         rc_negotiated_gen  = (cfg.gen < decode_max_gen(rc_partner_rate_id)) ?
                                cfg.gen : decode_max_gen(rc_partner_rate_id);
 
@@ -1182,7 +1365,7 @@ endtask
           UVM_LOW)
 
         `uvm_info("TX_LTSSM",">=1024 TS1 sent, 8 consecutive matching TS received -> POLLING_CONFIGURATION",UVM_LOW)
-        rc_received_os.delete();
+        rc_os_lane_delete();
         rc_state = POLLING_CONFIGURATION;
         return;
 
@@ -1193,7 +1376,7 @@ endtask
      // condition (i)/(ii) predetermined-lane-subset nuance which
      // needs the real Symbol-5 bit decode to implement exactly).
      `uvm_info("TX_LTSSM","24ms timeout without meeting fast-path barrier -> POLLING_COMPLIANCE",UVM_LOW)
-     rc_received_os.delete();
+     rc_os_lane_delete();
      rc_state = POLLING_COMPLIANCE;
 
   endtask
@@ -1219,7 +1402,7 @@ endtask
      barrier_met      = 0;
      timeout_occured  = 0;
      enter_compliance = 0;
-     ep_os.delete();
+     ep_os_lane_delete();
 
      fork
 
@@ -1244,7 +1427,7 @@ endtask
         end
 
         begin
-           wait(ep_os.size() > 9);
+           wait(ep_os_all_lanes_ready(9));
       `uvm_info("MAC_TX_DRV", $sformatf(" wait_completed ORDERED_SETS %0d DWORDs ts1_sent_count = %d",ep_os.size(),ts1_sent_count), UVM_LOW)
           // wait(ts1_sent_count > 7);
 
@@ -1266,7 +1449,7 @@ endtask
      if(enter_compliance)
      begin
         `uvm_info("RX_LTSSM","Enter Compliance bit set during POLLING_ACTIVE -> POLLING_COMPLIANCE",UVM_LOW)
-        ep_os.delete();
+        ep_os_lane_delete();
         ep_state = EP_POLLING_COMPLIANCE;
         return;
      end
@@ -1274,7 +1457,7 @@ endtask
      if(barrier_met)
      begin
 
-        ep_partner_rate_id = ep_os[0][95:88];
+        ep_partner_rate_id = ep_os_lane[0][0][95:88];
         ep_negotiated_gen  = (cfg.gen < decode_max_gen(ep_partner_rate_id)) ?
                                cfg.gen : decode_max_gen(ep_partner_rate_id);
 
@@ -1284,14 +1467,14 @@ endtask
           UVM_LOW)
 
         `uvm_info("RX_LTSSM",">=1024 TS1 sent, 8 consecutive matching TS received -> POLLING_CONFIGURATION",UVM_LOW)
-        ep_os.delete();
+        ep_os_lane_delete();
         ep_state = EP_POLLING_CONFIGURATION;
         return;
 
      end
 
      `uvm_info("RX_LTSSM","24ms timeout without meeting fast-path barrier -> POLLING_COMPLIANCE",UVM_LOW)
-     ep_os.delete();
+     ep_os_lane_delete();
      ep_state = EP_POLLING_COMPLIANCE;
 
   endtask
@@ -1313,7 +1496,7 @@ endtask
       `uvm_info("TX_LTSSM",$sformatf("Compliance %p",rc_received),UVM_LOW)
           polling_compilance.wait_for();
       `uvm_info("TX_LTSSM","Compliance exit → POLLING_CONFIGURATION",UVM_LOW)
-      rc_received_os.delete();
+      rc_os_lane_delete();
       rc_state = POLLING_CONFIGURATION;
     endtask
 
@@ -1321,10 +1504,10 @@ endtask
   task ep_state_polling_compliance();
       `uvm_info("RX_LTSSM","POLLING_COMPLIANCE – waiting compliance_exit",UVM_LOW)
      // compliance_exit.wait_trigger();
-        wait(ep_os.size()>0);
+        wait(ep_os_all_lanes_ready(1));
       polling_compilance.wait_for();
        `uvm_info("RX_LTSSM",$sformatf("Compliance ep_os %p ep_size = %d",ep_os,ep_os.size()),UVM_LOW)
-      ep_os.delete();
+      ep_os_lane_delete();
       `uvm_info("RX_LTSSM","Compliance exit ep_received → POLLING_CONFIGURATION",UVM_LOW)
       ep_state = EP_POLLING_CONFIGURATION;
     endtask
@@ -1351,7 +1534,7 @@ endtask
      received_first_ts2       = 0;
      barrier_met              = 0;
      timeout_occured          = 0;
-     rc_received_os.delete();
+     rc_os_lane_delete();
 
      fork
         begin
@@ -1369,7 +1552,7 @@ endtask
         end
 
         begin
-           wait(rc_received_os.size() > 7);
+           wait(rc_os_all_lanes_ready(7));
            `uvm_info("MAC_TX_DRV",
               $sformatf("wait_completed RC_ORDERED_SETS %0d DWORDs",rc_received_os.size()),
               UVM_LOW)
@@ -1397,14 +1580,14 @@ endtask
         `uvm_info("TX_LTSSM",
            "8 consecutive TS2 (PAD) received + 16 TS2 sent after first RX -> CONFIG_LINKNUM_START",
            UVM_LOW)
-        rc_received_os.delete();
+        rc_os_lane_delete();
         rc_state = CONFIG_LINKNUM_START;
         return;
      end
 
      // 48ms timeout without meeting the fast-path barrier -> Detect
      `uvm_info("TX_LTSSM","48ms timeout without meeting fast-path barrier -> DETECT",UVM_LOW)
-     rc_received_os.delete();
+     rc_os_lane_delete();
      rc_state = DETECT_QUIET;
 
   endtask
@@ -1430,7 +1613,7 @@ endtask
      received_first_ts2       = 0;
      barrier_met              = 0;
      timeout_occured          = 0;
-     ep_os.delete();
+     ep_os_lane_delete();
 
      fork
 
@@ -1463,7 +1646,7 @@ endtask
         //--------------------------------------------------------
         begin
 
-           wait(ep_os.size() > 15);
+           wait(ep_os_all_lanes_ready(15));
            `uvm_info("MAC_TX_DRV",
               $sformatf("wait_completed EP_ORDERED_SETS %0d DWORDs",ep_os.size()),
               UVM_LOW)
@@ -1490,290 +1673,847 @@ endtask
         `uvm_info("TX_LTSSM",
            "EP: 8 consecutive TS2 (PAD) received + 16 TS2 sent after first RX -> CONFIG_LINKNUM_START",
            UVM_LOW)
-        ep_os.delete();
+        ep_os_lane_delete();
         ep_state = EP_CONFIG_LINKNUM_START;
         return;
      end
 
      // 48ms timeout without meeting the fast-path barrier -> Detect
      `uvm_info("TX_LTSSM","EP: 48ms timeout without meeting fast-path barrier -> DETECT",UVM_LOW)
-     ep_os.delete();
+     ep_os_lane_delete();
      ep_state = EP_DETECT_QUIET;
 
   endtask
 
 
   // ---- RC_MODE ----
-  task rc_state_config_linknum_start();
-  
-  rc_link_num = rc_TS1[111:104];
-  rc_lane_num = rc_TS1[119:112];
-      `uvm_info("TX_LTSSM","CONFIG_LINKNUM_START – broadcasting link num",UVM_LOW)
-  //     rc_negotiated_link_num = 8'h00;   // x1, single link
-   
-      // Drive rc_TS1 with link number encoded (field placement is design-specific)
-      repeat(4) begin
-        @(posedge rc_pvif.PCLK);
-        rc_drive_os(rc_TS1);   // in real impl embed rc_link_num into the OS bytes
+    task rc_state_config_linknum_start();
+
+      bit barrier_met;
+      bit timeout_occured;
+ if(cfg.link_ctrl_disable_link)
+      begin
+         `uvm_info("TX_LTSSM","Link Disable bit set prior to entry -> immediate DISABLED",UVM_LOW)
+         rc_state = DISABLED;
+         return;
       end
-      @(posedge rc_pvif.PCLK);
-      rc_tx_bcast_valid(0);
-       // wait(rc_received.size()>0);
-      //link_num_valid.trigger();
-      config_link_start.wait_for();
-      `uvm_info("TX_LTSSM",$sformatf("CONFIG_LINKNUM_START → negotiating | rc_link_num=%0h, rc_lane_num=%0h",rc_link_num,rc_lane_num),UVM_LOW)
-      `uvm_info("TX_LTSSM","Link num broadcast done → CONFIG_LINKNUM_ACCEPT",UVM_LOW)
-       rc_received_os.delete();
-      rc_state = CONFIG_LINKNUM_ACCEPT;
+
+      //-----------------------------------------------------------
+      // Directed exit: Enter Loopback -> Loopback.Entry (RC = master).
+      //-----------------------------------------------------------
+      if(cfg.link_ctrl_enter_loopback)
+      begin
+         `uvm_info("TX_LTSSM","Enter Loopback set prior to entry -> immediate LOOPBACK_ENTRY",UVM_LOW)
+         rc_state = LOOPBACK_ENTRY;
+         return;
+      end
+
+      // x1 single-link simplification: Downstream selects Link 0,
+      // Lane number stays PAD until LINKNUM_ACCEPT assigns it.
+      // TODO(multi-lane): real Link-number selection groups Lanes
+      // per spec 4.2.6.3.1.1 instead of hardcoding 0.
+      rc_negotiated_link_num = 8'h00;
+      barrier_met            = 0;
+      timeout_occured        = 0;
+
+      `uvm_info("TX_LTSSM",$sformatf("CONFIG_LINKNUM_START - broadcasting Link=%0h, Lane=PAD",rc_negotiated_link_num),UVM_LOW)
+
+      rc_os_lane_delete();
+
+      fork
+         begin
+            repeat(2) begin
+               @(posedge rc_pvif.PCLK);
+               rc_drive_os(tag_ts1(rc_TS1, .link_num(rc_negotiated_link_num)));
+            end
+              @(posedge rc_pvif.PCLK);
+	      rc_tx_bcast_valid(0);
+
+	        if(cfg.link_ctrl_disable_link) begin
+                 disable fork;
+              end
+
+              if(cfg.link_ctrl_enter_loopback) begin
+                 disable fork;
+              end
+
+         end
+
+         begin
+            wait(rc_os_all_lanes_ready(1));   // TODO: exact 2-consecutive
+                                                // non-PAD Link match check,
+                                                // not just queue depth
+            config_link_start.wait_for();
+            barrier_met = 1;
+            disable fork;
+         end
+
+         begin
+            rc_ltssm_timer(cfg.config_linknum_start_timeout);
+            timeout_occured = 1;
+            disable fork;
+         end
+      join
+       
+      if(cfg.link_ctrl_disable_link) begin
+         `uvm_info("TX_LTSSM","Link Disable bit set -> DISABLED",UVM_LOW)
+         rc_os_lane_delete();
+         rc_state = DISABLED;
+         return;
+      end
+
+      if(cfg.link_ctrl_enter_loopback) begin
+         `uvm_info("TX_LTSSM","Enter Loopback set -> LOOPBACK_ENTRY",UVM_LOW)
+         rc_os_lane_delete();
+         rc_state = LOOPBACK_ENTRY;
+         return;
+      end
+
+
+      if(barrier_met) begin
+         rc_link_num = rc_negotiated_link_num;
+         `uvm_info("TX_LTSSM",$sformatf("CONFIG_LINKNUM_START -> negotiating | rc_link_num=%0h",rc_link_num),UVM_LOW)
+         `uvm_info("TX_LTSSM","Link num broadcast done -> CONFIG_LINKNUM_ACCEPT",UVM_LOW)
+         rc_os_lane_delete();
+         rc_state = CONFIG_LINKNUM_ACCEPT;
+         return;
+      end
+
+      `uvm_info("TX_LTSSM","24ms timeout in CONFIG_LINKNUM_START -> DETECT_QUIET",UVM_LOW)
+      rc_os_lane_delete();
+      rc_state = DETECT_QUIET;
     endtask
 
   // ---- EP_MODE ----
   task ep_state_config_linknum_start();
-      ep_link_num = ep_TS1[111:104];
-      ep_lane_num = ep_TS1[119:112];
-      `uvm_info("RX_LTSSM","CONFIG_LINKNUM_START – waiting link_num_valid",UVM_LOW)
-      //link_num_valid.wait_trigger();
-  //     ep_negotiated_link_num = 8'h00;   // mirror what TX advertised
-      `uvm_info("RX_LTSSM","Link number ep_received → CONFIG_LINKNUM_ACCEPT",UVM_LOW)
-        wait(ep_os.size()>0);
-        config_link_start.wait_for();
-      `uvm_info("RX_LTSSM",$sformatf("CONFIG_LINKNUM_START → negotiating| ep_link_num=%0h, ep_lane_num=%0h",ep_link_num, ep_lane_num),UVM_LOW)
-      `uvm_info("RX_LTSSM","Link num broadcast done → CONFIG_LINKNUM_ACCEPT",UVM_LOW)
-      ep_os.delete();
-      ep_state = EP_CONFIG_LINKNUM_ACCEPT;
+
+      bit barrier_met;
+      bit timeout_occured;
+ if(cfg.link_ctrl_disable_link)
+      begin
+         `uvm_info("RX_LTSSM","Link Disable bit set prior to entry -> immediate DISABLED",UVM_LOW)
+         ep_state = EP_DISABLED;
+         return;
+      end
+
+      //-----------------------------------------------------------
+      // Directed exit: Enter Loopback -> Loopback.Entry (EP = slave).
+      //-----------------------------------------------------------
+      if(cfg.link_ctrl_enter_loopback)
+      begin
+         `uvm_info("RX_LTSSM","Enter Loopback set prior to entry -> immediate LOOPBACK_ENTRY",UVM_LOW)
+         ep_state = EP_LOOPBACK_ENTRY;
+         return;
+      end
+
+
+      // Upstream mirrors whatever non-PAD Link number RC advertises;
+      // starts off sending PAD/PAD until it reflects RC's value back.
+      ep_negotiated_link_num = 8'h00;
+      barrier_met            = 0;
+      timeout_occured        = 0;
+
+      `uvm_info("RX_LTSSM","CONFIG_LINKNUM_START - waiting for Downstream Link num",UVM_LOW)
+
+      ep_os_lane_delete();
+
+      fork
+         begin
+            repeat(2) begin
+               @(posedge ep_pvif.PCLK);
+               ep_drive_os(tag_ts1(ep_TS1));   // PAD/PAD until Link num is learned
+            end
+              @(posedge ep_pvif.PCLK);
+	      ep_tx_bcast_valid(0);
+	          
+	       if(cfg.link_ctrl_disable_link) begin
+                 disable fork;
+              end
+
+              if(cfg.link_ctrl_enter_loopback) begin
+                 disable fork;
+              end
+
+         end
+
+         begin
+            wait(ep_os_all_lanes_ready(1));   // TODO: exact 2-consecutive non-PAD
+                                       // Link match check
+            config_link_start.wait_for();
+            barrier_met = 1;
+            disable fork;
+         end
+
+         begin
+            ep_ltssm_timer(cfg.config_linknum_start_timeout);
+            timeout_occured = 1;
+            disable fork;
+         end
+      join
+ 
+      if(cfg.link_ctrl_disable_link) begin
+         `uvm_info("RX_LTSSM","Link Disable bit set -> DISABLED",UVM_LOW)
+         ep_os_lane_delete();
+         ep_state = EP_DISABLED;
+         return;
+      end
+
+      if(cfg.link_ctrl_enter_loopback) begin
+         `uvm_info("RX_LTSSM","Enter Loopback set -> LOOPBACK_ENTRY",UVM_LOW)
+         ep_os_lane_delete();
+         ep_state = EP_LOOPBACK_ENTRY;
+         return;
+      end
+
+      if(barrier_met) begin
+         ep_link_num = ep_negotiated_link_num;
+         `uvm_info("RX_LTSSM",$sformatf("CONFIG_LINKNUM_START -> negotiating | ep_link_num=%0h",ep_link_num),UVM_LOW)
+         `uvm_info("RX_LTSSM","Link num broadcast done -> CONFIG_LINKNUM_ACCEPT",UVM_LOW)
+         ep_os_lane_delete();
+         ep_state = EP_CONFIG_LINKNUM_ACCEPT;
+         return;
+      end
+
+      `uvm_info("RX_LTSSM","24ms timeout in CONFIG_LINKNUM_START -> DETECT_QUIET",UVM_LOW)
+      ep_os_lane_delete();
+      ep_state = EP_DETECT_QUIET;
     endtask
 
   // ---- RC_MODE ----
   task rc_state_config_linknum_accept();
-      `uvm_info("TX_LTSSM","CONFIG_LINKNUM_ACCEPT – confirming",UVM_LOW)
-      
-      repeat(2) begin
-        @(posedge rc_pvif.PCLK);
-        rc_drive_os(rc_TS1);
+
+      bit barrier_met;
+      bit timeout_occured;
+
+      // x1 simplification: sequential numbering 0..n-1 on the Lanes
+      // that share the confirmed Link -> single Lane gets Lane 0.
+      // TODO(multi-lane): real sequential assignment per 4.2.6.3.2.1.
+      rc_negotiated_lane_num = 8'h00;
+      barrier_met            = 0;
+      timeout_occured        = 0;
+
+      `uvm_info("TX_LTSSM",$sformatf("CONFIG_LINKNUM_ACCEPT - assigning Link=%0h Lane=%0h",rc_negotiated_link_num,rc_negotiated_lane_num),UVM_LOW)
+
+      rc_os_lane_delete();
+
+      fork
+         begin
+            repeat(2) begin
+               @(posedge rc_pvif.PCLK);
+               rc_drive_os(tag_ts1(rc_TS1, .link_num(rc_negotiated_link_num), .lane_num(rc_negotiated_lane_num)));
+            end
+              @(posedge rc_pvif.PCLK);
+               rc_tx_bcast_valid(0);
+         end
+
+         begin
+            wait(rc_os_all_lanes_ready(1));   // TODO: exact 2-consecutive
+                                                // Link+Lane match check
+            config_link_accept.wait_for();
+            barrier_met = 1;
+            disable fork;
+         end
+
+         begin
+            rc_ltssm_timer(cfg.config_linknum_accept_timeout);
+            timeout_occured = 1;
+            disable fork;
+         end
+      join
+
+
+      if(barrier_met) begin
+         rc_lane_num = rc_negotiated_lane_num;
+         `uvm_info("TX_LTSSM",$sformatf("CONFIG_LINKNUM_ACCEPT -> confirmed | rc_link_num=%0h, rc_lane_num=%0h",rc_link_num,rc_lane_num),UVM_LOW)
+         rc_os_lane_delete();
+         `uvm_info("TX_LTSSM","Link-num & Lane_num accepted -> CONFIG_LANENUM_WAIT",UVM_LOW)
+         rc_state = CONFIG_LANNUM_WAIT;
+         return;
       end
-      @(posedge rc_pvif.PCLK);
-      rc_tx_bcast_valid(0);
-   
-  //     tx_linknum_accept.trigger();
-  //     rx_linknum_accept.wait_trigger();
-      wait(rc_received_os.size()>0);
-      config_link_accept.wait_for();
-      `uvm_info("TX_LTSSM",$sformatf("CONFIG_LINKNUM_ACCEPT → confirmed  | rc_link_num=%0h, rc_lane_num=%0h",rc_link_num, rc_lane_num),UVM_LOW)
-  
-      rc_received_os.delete();
-      `uvm_info("TX_LTSSM","Link-num & Lane_num accepted → CONFIG_LANENUM_WAIT",UVM_LOW)
-      rc_state = CONFIG_LANNUM_WAIT;
+
+      `uvm_info("TX_LTSSM","2ms timeout in CONFIG_LINKNUM_ACCEPT -> DETECT_QUIET",UVM_LOW)
+      rc_os_lane_delete();
+      rc_state = DETECT_QUIET;
     endtask
 
   // ---- EP_MODE ----
   task ep_state_config_linknum_accept();
-      `uvm_info("RX_LTSSM","CONFIG_LINKNUM_ACCEPT – confirming",UVM_LOW)
-      repeat(2) begin
-        @(posedge ep_pvif.PCLK);
-        ep_drive_os(ep_TS1);
+
+      bit barrier_met;
+      bit timeout_occured;
+
+      // Mirrors RC's assigned Lane number where possible (x1: Lane 0).
+      // TODO(multi-lane): match-or-reverse assignment per 4.2.6.3.2.2.
+      ep_negotiated_lane_num = 8'h00;
+      barrier_met            = 0;
+      timeout_occured        = 0;
+
+      `uvm_info("RX_LTSSM",$sformatf("CONFIG_LINKNUM_ACCEPT - assigning Link=%0h Lane=%0h",ep_negotiated_link_num,ep_negotiated_lane_num),UVM_LOW)
+
+      ep_os_lane_delete();
+
+      fork
+         begin
+            repeat(2) begin
+               @(posedge ep_pvif.PCLK);
+               ep_drive_os(tag_ts1(ep_TS1, .link_num(ep_negotiated_link_num), .lane_num(ep_negotiated_lane_num)));
+            end
+              @(posedge ep_pvif.PCLK);
+               ep_tx_bcast_valid(0);
+         end
+
+         begin
+            wait(ep_os_all_lanes_ready(1));   // TODO: exact 2-consecutive Link+Lane match
+            config_link_accept.wait_for();
+            barrier_met = 1;
+            disable fork;
+         end
+
+         begin
+            ep_ltssm_timer(cfg.config_linknum_accept_timeout);
+            timeout_occured = 1;
+            disable fork;
+         end
+      join
+
+
+      if(barrier_met) begin
+         ep_lane_num = ep_negotiated_lane_num;
+         `uvm_info("RX_LTSSM",$sformatf("CONFIG_LINKNUM_ACCEPT -> confirmed | ep_link_num=%0h, ep_lane_num=%0h",ep_link_num,ep_lane_num),UVM_LOW)
+         ep_os_lane_delete();
+         `uvm_info("RX_LTSSM","Link-num accepted -> CONFIG_LANENUM_WAIT",UVM_LOW)
+         ep_state = EP_CONFIG_LANNUM_WAIT;
+         return;
       end
-      @(posedge ep_pvif.PCLK);
-      ep_tx_bcast_valid(0);
-  
-    //  rx_linknum_accept.trigger();
-    //  tx_linknum_accept.wait_trigger();
-        wait(ep_os.size()>0);
-      config_link_accept.wait_for();
-      `uvm_info("RX_LTSSM",$sformatf("CONFIG_LINKNUM_ACCEPT → confirmed| ep_link_num=%0h, ep_lane_num=%0h",ep_link_num, ep_lane_num),UVM_LOW)
-      ep_os.delete();
-      `uvm_info("RX_LTSSM","Link-num accepted → CONFIG_LANENUM_WAIT",UVM_LOW)
-      ep_state = EP_CONFIG_LANNUM_WAIT;
+
+      `uvm_info("RX_LTSSM","2ms timeout in CONFIG_LINKNUM_ACCEPT -> DETECT_QUIET",UVM_LOW)
+      ep_os_lane_delete();
+      ep_state = EP_DETECT_QUIET;
     endtask
 
   // ---- RC_MODE ----
   task rc_state_config_lanenum_wait();
-      rc_link_num = rc_TS1[111:104];
-      rc_lane_num = rc_TS1[111:104];
-      `uvm_info("TX_LTSSM","CONFIG_LANENUM_WAIT – broadcasting lane nums",UVM_LOW)
-     // lane_num_valid.wait_trigger();
-      wait(rc_received_os.size()>0);
-      config_lane_wait.wait_for();
-          `uvm_info("TX_LTSSM",$sformatf("CONFIG_LANENUM_WAIT → negotiating | rc_link_num=%0h, rc_lane_num=%0h",rc_link_num,rc_lane_num),UVM_LOW)
-      rc_received_os.delete();
-      `uvm_info("TX_LTSSM","Lane numbers rc_received → CONFIG_LANENUM_ACCEPT",UVM_LOW)
-      rc_state = CONFIG_LANENUM_ACCEPT;
+
+      bit [7:0] rc_lane_num_on_entry;
+      bit       barrier_met;
+      bit       timeout_occured;
+
+      // Exit condition requires the assigned Lane number to CHANGE
+      // relative to whatever it was on entry into this substate
+      // (spec 4.2.6.3.4.1) - latch it before doing anything else.
+      rc_lane_num_on_entry = rc_negotiated_lane_num;
+
+      barrier_met     = 0;
+      timeout_occured = 0;
+      rc_os_lane_delete();
+
+      `uvm_info("TX_LTSSM",$sformatf("CONFIG_LANENUM_WAIT - Lane on entry=%0h",rc_lane_num_on_entry),UVM_LOW)
+
+      fork
+         begin
+            repeat(2) begin
+               @(posedge rc_pvif.PCLK);
+               rc_drive_os(tag_ts1(rc_TS1, .link_num(rc_negotiated_link_num), .lane_num(rc_negotiated_lane_num)));
+            end
+              @(posedge rc_pvif.PCLK);
+               rc_tx_bcast_valid(0);
+         end
+
+         begin
+            // TODO: real check per 4.2.6.3.4.1 - (a) 2 consecutive TS1
+            // w/ Lane num != rc_lane_num_on_entry AND not all Link
+            // nums PAD, OR (b) 2 consecutive TS1 on all Lanes matching
+            // exactly what's transmitted. Downstream watches TS1 only.
+            wait(rc_os_all_lanes_ready(1));
+            config_lane_wait.wait_for();
+            barrier_met = 1;
+            disable fork;
+         end
+
+         begin
+            rc_ltssm_timer(cfg.config_lanenum_wait_timeout);   // TODO: add 2ms timeout param to cfg
+            timeout_occured = 1;
+            disable fork;
+         end
+      join
+
+      rc_link_num = rc_negotiated_link_num;
+      rc_lane_num = rc_negotiated_lane_num;
+
+      if(barrier_met) begin
+         `uvm_info("TX_LTSSM",$sformatf("CONFIG_LANENUM_WAIT -> negotiating | rc_link_num=%0h, rc_lane_num=%0h",rc_link_num,rc_lane_num),UVM_LOW)
+         rc_os_lane_delete();
+         `uvm_info("TX_LTSSM","Lane numbers rc_received -> CONFIG_LANENUM_ACCEPT",UVM_LOW)
+         rc_state = CONFIG_LANENUM_ACCEPT;
+         return;
+      end
+
+      // 2ms timeout, or all-Lanes-PAD exit -> Detect
+      `uvm_info("TX_LTSSM","2ms timeout / all-PAD in CONFIG_LANENUM_WAIT -> DETECT_QUIET",UVM_LOW)
+      rc_os_lane_delete();
+      rc_state = DETECT_QUIET;
     endtask
 
   // ---- EP_MODE ----
   task ep_state_config_lanenum_wait();
-      ep_link_num = ep_TS1[111:104];
-      ep_lane_num = ep_TS1[111:104];
-      `uvm_info("RX_LTSSM","CONFIG_LANENUM_WAIT – broadcasting lane nums",UVM_LOW)
-  //     ep_negotiated_lane_num = 8'h00;   // lane 0
-      repeat(4) begin
-        @(posedge ep_pvif.PCLK);
-        ep_drive_os(TS2);   // embed ep_lane_num in TS2 bytes in real impl
+
+      bit [7:0] ep_lane_num_on_entry;
+      bit       barrier_met;
+      bit       timeout_occured;
+
+      ep_lane_num_on_entry = ep_negotiated_lane_num;
+
+      barrier_met     = 0;
+      timeout_occured = 0;
+      ep_os_lane_delete();
+
+      `uvm_info("RX_LTSSM",$sformatf("CONFIG_LANENUM_WAIT - Lane on entry=%0h",ep_lane_num_on_entry),UVM_LOW)
+
+      fork
+         begin
+            repeat(2) begin
+               @(posedge ep_pvif.PCLK);
+               ep_drive_os(tag_ts1(ep_TS1, .link_num(ep_negotiated_link_num), .lane_num(ep_negotiated_lane_num)));
+            end
+               @(posedge ep_pvif.PCLK);
+               ep_tx_bcast_valid(0);
+         end
+
+         begin
+            // TODO: real check per 4.2.6.3.4.2 - Upstream has TWO
+            // independent exits: (a) 2 consecutive TS1 w/ Lane num
+            // != ep_lane_num_on_entry AND not all Link nums PAD, OR
+            // (b) ANY Lane receives 2 consecutive TS2 (no lane-num-
+            // change precondition on this branch). Needs ep_os_lane[0] to
+            // disambiguate TS1 vs TS2 - currently it does not.
+            wait(ep_os_all_lanes_ready(1));
+            config_lane_wait.wait_for();
+            barrier_met = 1;
+            disable fork;
+         end
+
+         begin
+            ep_ltssm_timer(cfg.config_lanenum_wait_timeout);   // TODO: add 2ms timeout param to cfg
+            timeout_occured = 1;
+            disable fork;
+         end
+      join
+
+      ep_link_num = ep_negotiated_link_num;
+      ep_lane_num = ep_negotiated_lane_num;
+
+      if(barrier_met) begin
+         `uvm_info("RX_LTSSM",$sformatf("CONFIG_LANENUM_WAIT -> negotiating | ep_link_num=%0h, ep_lane_num=%0h",ep_link_num,ep_lane_num),UVM_LOW)
+         ep_os_lane_delete();
+         `uvm_info("RX_LTSSM","Lane broadcast done -> CONFIG_LANENUM_ACCEPT",UVM_LOW)
+         ep_state = EP_CONFIG_LANENUM_ACCEPT;
+         return;
       end
-      @(posedge ep_pvif.PCLK);
-      ep_tx_bcast_valid(0);
-  
-      //lane_num_valid.trigger();
-          //wait(ep_os.size()>0);
-         config_lane_wait.wait_for();
-      `uvm_info("RX_LTSSM",$sformatf("CONFIG_LANENUM_WAIT → negotiating| ep_link_num=%0h, ep_lane_num=%0h",ep_link_num, ep_lane_num),UVM_LOW)
-      ep_os.delete();
-      `uvm_info("RX_LTSSM","Lane broadcast done → CONFIG_LANENUM_ACCEPT",UVM_LOW)
-      ep_state = EP_CONFIG_LANENUM_ACCEPT;
+
+      `uvm_info("RX_LTSSM","2ms timeout / all-PAD in CONFIG_LANENUM_WAIT -> DETECT_QUIET",UVM_LOW)
+      ep_os_lane_delete();
+      ep_state = EP_DETECT_QUIET;
     endtask
 
   // ---- RC_MODE ----
   task rc_state_config_lanenum_accept();
-      `uvm_info("TX_LTSSM","CONFIG_LANENUM_ACCEPT – confirming lanes",UVM_LOW)
-      repeat(2) begin
-        @(posedge rc_pvif.PCLK);
-        rc_drive_os(TS2);
-      end
-      @(posedge rc_pvif.PCLK);
+
+      bit full_match;
+      bit timeout_occured;
+
+      `uvm_info("TX_LTSSM",$sformatf("CONFIG_LANENUM_ACCEPT - confirming Link=%0h Lane=%0h",rc_negotiated_link_num,rc_negotiated_lane_num),UVM_LOW)
+
+      full_match      = 0;
+      timeout_occured = 0;
+      rc_os_lane_delete();
+
+      fork
+         begin
+            repeat(2) begin
+               @(posedge rc_pvif.PCLK);
+               rc_drive_os(tag_ts1(rc_TS1, .link_num(rc_negotiated_link_num), .lane_num(rc_negotiated_lane_num)));
+            end
+               @(posedge rc_pvif.PCLK);
+                rc_tx_bcast_valid(0);
+         end
+
+         begin
+            // TODO: real check per 4.2.6.3.3.1 - 2 consecutive TS1
+            // w/ non-PAD Link+Lane matching ALL transmitted values
+            // (or reversed Lane0<->Lane(n-1) if reversal supported)
+            // -> Configuration.Complete. Downstream watches TS1.
+            // x1 simplification: subset-match branch collapses into
+            // full_match/no-match since a "subset" of 1 Lane is the
+            // same as full or none.
+            wait(rc_os_all_lanes_ready(1));
+            config_lane_accept.wait_for();
+            full_match = 1;
+            disable fork;
+         end
+
+         begin
+            rc_ltssm_timer(cfg.config_lanenum_accept_timeout);   // TODO: add 2ms timeout param to cfg
+            timeout_occured = 1;
+            disable fork;
+         end
+      join
+
       rc_tx_bcast_valid(0);
-   
-  //     tx_lanenum_accept.trigger();
-  //     rx_lanenum_accept.wait_trigger();
-      wait(rc_received_os.size()>0);
-       config_lane_accept.wait_for();
-      `uvm_info("TX_LTSSM",$sformatf("CONFIG_LANENUM_ACCEPT → confirmed | rc_link_num=%0h, rc_lane_num=%0h",rc_link_num,rc_lane_num),UVM_LOW)
-  
-      rc_received_os.delete();
-      `uvm_info("TX_LTSSM","Lane-num accepted → CONFIG_COMPLETE",UVM_LOW)
-      rc_state = CONFIG_COMPLETE;
+      rc_link_num = rc_negotiated_link_num;
+      rc_lane_num = rc_negotiated_lane_num;
+
+      if(full_match) begin
+         `uvm_info("TX_LTSSM",$sformatf("CONFIG_LANENUM_ACCEPT -> confirmed | rc_link_num=%0h, rc_lane_num=%0h",rc_link_num,rc_lane_num),UVM_LOW)
+         rc_os_lane_delete();
+         `uvm_info("TX_LTSSM","Lane-num accepted -> CONFIG_COMPLETE",UVM_LOW)
+         rc_state = CONFIG_COMPLETE;
+         return;
+      end
+
+      `uvm_info("TX_LTSSM","No Link configurable / all-PAD in CONFIG_LANENUM_ACCEPT -> DETECT_QUIET",UVM_LOW)
+      rc_os_lane_delete();
+      rc_state = DETECT_QUIET;
     endtask
 
   // ---- EP_MODE ----
   task ep_state_config_lanenum_accept();
-      `uvm_info("RX_LTSSM","CONFIG_LANENUM_ACCEPT – confirming lanes",UVM_LOW)
-      repeat(2) begin
-        @(posedge ep_pvif.PCLK);
-        ep_drive_os(TS2);
+
+      bit full_match;
+      bit timeout_occured;
+
+      `uvm_info("RX_LTSSM",$sformatf("CONFIG_LANENUM_ACCEPT - confirming Link=%0h Lane=%0h",ep_negotiated_link_num,ep_negotiated_lane_num),UVM_LOW)
+
+      full_match      = 0;
+      timeout_occured = 0;
+      ep_os_lane_delete();
+
+      fork
+         begin
+            repeat(2) begin
+               @(posedge ep_pvif.PCLK);
+               ep_drive_os(tag_ts1(ep_TS1, .link_num(ep_negotiated_link_num), .lane_num(ep_negotiated_lane_num)));
+            end
+               @(posedge ep_pvif.PCLK);
+               ep_tx_bcast_valid(0);
+         end
+
+         begin
+            // TODO: real check per 4.2.6.3.3.2 - Upstream watches for
+            // TS2 (not TS1): 2 consecutive TS2 w/ non-PAD Link+Lane
+            // matching ALL transmitted values -> Configuration.Complete.
+            // Needs ep_os_lane[0] to disambiguate TS1 vs TS2.
+            wait(ep_os_all_lanes_ready(1));
+            config_lane_accept.wait_for();
+            full_match = 1;
+            disable fork;
+         end
+
+         begin
+            ep_ltssm_timer(cfg.config_lanenum_accept_timeout);   // TODO: add 2ms timeout param to cfg
+            timeout_occured = 1;
+            disable fork;
+         end
+      join
+
+      ep_link_num = ep_negotiated_link_num;
+      ep_lane_num = ep_negotiated_lane_num;
+
+      if(full_match) begin
+         `uvm_info("RX_LTSSM",$sformatf("CONFIG_LANENUM_ACCEPT -> confirmed | ep_link_num=%0h, ep_lane_num=%0h",ep_link_num,ep_lane_num),UVM_LOW)
+         ep_os_lane_delete();
+         `uvm_info("RX_LTSSM","Lane-num accepted -> CONFIG_COMPLETE",UVM_LOW)
+         ep_state = EP_CONFIG_COMPLETE;
+         return;
       end
-      @(posedge ep_pvif.PCLK);
-      ep_tx_bcast_valid(0);
-  
-  //     rx_lanenum_accept.trigger();
-  //     tx_lanenum_accept.wait_trigger();
-        wait(ep_os.size()>0);
-      config_lane_accept.wait_for();
-      `uvm_info("RX_LTSSM",$sformatf("CONFIG_LANENUM_ACCEPT → confirmed | ep_link_num=%0h, ep_lane_num=%0h",ep_link_num,ep_lane_num),UVM_LOW)
-  
-        ep_os.delete();
-      `uvm_info("RX_LTSSM","Lane-num accepted → CONFIG_COMPLETE",UVM_LOW)
-      ep_state = EP_CONFIG_COMPLETE;
+
+      `uvm_info("RX_LTSSM","No Link configurable / all-PAD in CONFIG_LANENUM_ACCEPT -> DETECT_QUIET",UVM_LOW)
+      ep_os_lane_delete();
+      ep_state = EP_DETECT_QUIET;
     endtask
 
   // ---- RC_MODE ----
   task rc_state_config_complete();
-    `uvm_info("TX_LTSSM",$sformatf("CONFIG_COMPLETE (advertising Gen%0d)",cfg.gen),UVM_LOW)
-    repeat (16) begin
-      @(posedge rc_pvif.PCLK);
-      rc_drive_os(tag_ts1(rc_TS1));
-    end
-    @(posedge rc_pvif.PCLK);
-    rc_tx_bcast_valid(0);
-    wait(rc_received_os.size() > 0);
-    config_complete.wait_for();
-    `uvm_info("TX_LTSSM",$sformatf("Received %0d ordered sets",rc_received_os.size()),UVM_LOW)
-        if (rc_received_os.size() == 8) begin
-      `uvm_info("TX_LTSSM","Received 8 TS1s -> CONFIG_IDLE",UVM_LOW)
-      rc_received_os.delete();
-      rc_state = CONFIG_IDLE;
-    end
-    else begin
-      `uvm_error("TX_LTSSM",$sformatf("Only %0d TS1s rc_received. Returning to DETECT",rc_received_os.size()))
-      rc_received_os.delete();
-      rc_state = DETECT_QUIET;
-    end
+
+      bit          idle_ready;
+      bit          timeout_occured;
+      int unsigned rc_ts2_sent_since_first_rx;
+      bit          rc_first_ts2_rx_seen;
+
+      `uvm_info("TX_LTSSM",$sformatf("Entered CONFIG_COMPLETE (advertising Gen%0d, Link=%0h Lane=%0h)",cfg.gen,rc_negotiated_link_num,rc_negotiated_lane_num),UVM_LOW)
+
+      idle_ready                  = 0;
+      timeout_occured             = 0;
+      rc_ts2_sent_since_first_rx  = 0;
+      rc_first_ts2_rx_seen        = 0;
+      rc_os_lane_delete();
+
+      fork
+         //-----------------------------------------------------
+         // TX: switch to TS2 (not TS1) with Link/Lane matching
+         // the received TS1 numbers, per 4.2.6.3.5.1.
+         //-----------------------------------------------------
+         begin
+            repeat(16) begin
+               @(posedge rc_pvif.PCLK);
+               rc_drive_os(tag_ts2(TS2, .link_num(rc_negotiated_link_num), .lane_num(rc_negotiated_lane_num)));
+               if(rc_first_ts2_rx_seen)
+                  rc_ts2_sent_since_first_rx++;
+            end
+               @(posedge rc_pvif.PCLK);
+               rc_tx_bcast_valid(0);
+         end
+
+         //-----------------------------------------------------
+         // RX: 8 consecutive matching TS2 (Lane/Link non-PAD,
+         // identical rate id) AND >=16 TS2 sent after the first
+         // TS2 is received back.
+         //-----------------------------------------------------
+         begin
+            wait(rc_os_all_lanes_ready(7));   // TODO: real 8-consecutive
+                                                // match check (Lane/Link +
+                                                // rate id incl. upconfigure
+                                                // bit), not just queue depth
+            `uvm_info("MAC_TX_DRV",$sformatf("wait_completed RC_ORDERED_SETS %0d DWORDs",rc_received_os_lane[0].size()),UVM_LOW)
+
+            config_complete.wait_for();
+            idle_ready = 1;
+            disable fork;
+         end
+
+         begin
+            rc_ltssm_timer(cfg.config_complete_timeout);   // TODO: add 2ms timeout param to cfg
+            timeout_occured = 1;
+            disable fork;
+         end
+      join
+
+      rc_os_lane_delete();
+
+      if(idle_ready) begin
+         `uvm_info("TX_LTSSM","8x consecutive TS2 match + 16 sent-after-first -> CONFIG_IDLE",UVM_LOW)
+         rc_state = CONFIG_IDLE;
+         return;
+      end
+
+      // 2ms timeout - branch on current data rate per 4.2.6.3.5.1.
+      if(cfg.gen == 1 || cfg.gen == 2) begin
+         `uvm_info("TX_LTSSM","2ms timeout at Gen1/Gen2 -> DETECT_QUIET",UVM_LOW)
+         rc_state = DETECT_QUIET;
+      end
+      else if(cfg.gen == 3 && rc_idle_to_rlock_transitioned < 8'hFF) begin
+         `uvm_info("TX_LTSSM","2ms timeout, Gen3, idle_to_rlock_transitioned<FFh -> CONFIG_IDLE",UVM_LOW)
+         rc_state = CONFIG_IDLE;
+      end
+      else begin
+         `uvm_info("TX_LTSSM","2ms timeout, fallback -> DETECT_QUIET",UVM_LOW)
+         rc_state = DETECT_QUIET;
+      end
   endtask
 
   // ---- EP_MODE ----
   task ep_state_config_complete();
-    `uvm_info("RX_LTSSM",$sformatf("CONFIG_COMPLETE (advertising Gen%0d)",cfg.gen),UVM_LOW)
-    repeat (8) begin
-      @(posedge ep_pvif.PCLK);
-      ep_drive_os(tag_ts1(ep_TS1));
-    end
-    @(posedge ep_pvif.PCLK);
-    ep_tx_bcast_valid(0);
-    wait(ep_os.size() > 0);
-    config_complete.wait_for();
-    `uvm_info("RX_LTSSM",$sformatf("Received %0d ordered sets", ep_os.size()),UVM_LOW)
-      if (ep_os.size() == 16) begin
-      `uvm_info("RX_LTSSM","Received 16 TS1s -> CONFIG_IDLE",UVM_LOW)
-      ep_os.delete();
-      ep_state = EP_CONFIG_IDLE;
-    end
-    else begin
-      `uvm_error("RX_LTSSM",$sformatf("Only %0d TS1s ep_received. Returning to DETECT",ep_os.size()))
-      ep_os.delete();
-      ep_state = EP_DETECT_QUIET;
-    end
+
+      bit          idle_ready;
+      bit          timeout_occured;
+      int unsigned ep_ts2_sent_since_first_rx;
+      bit          ep_first_ts2_rx_seen;
+
+      `uvm_info("RX_LTSSM",$sformatf("Entered CONFIG_COMPLETE (advertising Gen%0d, Link=%0h Lane=%0h)",cfg.gen,ep_negotiated_link_num,ep_negotiated_lane_num),UVM_LOW)
+
+      idle_ready                  = 0;
+      timeout_occured             = 0;
+      ep_ts2_sent_since_first_rx  = 0;
+      ep_first_ts2_rx_seen        = 0;
+      ep_os_lane_delete();
+
+      fork
+         //-----------------------------------------------------
+         // TX: Upstream matches received TS2 Link/Lane numbers
+         // (not received TS1), per 4.2.6.3.5.2.
+         //-----------------------------------------------------
+         begin
+            repeat(8) begin
+               @(posedge ep_pvif.PCLK);
+               ep_drive_os(tag_ts2(TS2, .link_num(ep_negotiated_link_num), .lane_num(ep_negotiated_lane_num)));
+               if(ep_first_ts2_rx_seen)
+                  ep_ts2_sent_since_first_rx++;
+            end
+               @(posedge ep_pvif.PCLK);
+               ep_tx_bcast_valid(0);
+         end
+
+         begin
+
+            wait(ep_os_all_lanes_ready(15));   // TODO: real 8-consecutive match check
+            config_complete.wait_for();
+            idle_ready = 1;
+            disable fork;
+         end
+
+         begin
+            ep_ltssm_timer(cfg.config_complete_timeout);   // TODO: add 2ms timeout param to cfg
+            timeout_occured = 1;
+            disable fork;
+         end
+      join
+
+      ep_os_lane_delete();
+
+      if(idle_ready) begin
+         `uvm_info("RX_LTSSM","8x consecutive TS2 match + 16 sent-after-first -> CONFIG_IDLE",UVM_LOW)
+         ep_state = EP_CONFIG_IDLE;
+         return;
+      end
+
+      if(cfg.gen == 1 || cfg.gen == 2) begin
+         `uvm_info("RX_LTSSM","2ms timeout at Gen1/Gen2 -> DETECT_QUIET",UVM_LOW)
+         ep_state = EP_DETECT_QUIET;
+      end
+      else if(cfg.gen == 3 && ep_idle_to_rlock_transitioned < 8'hFF) begin
+         `uvm_info("RX_LTSSM","2ms timeout, Gen3, idle_to_rlock_transitioned<FFh -> CONFIG_IDLE",UVM_LOW)
+         ep_state = EP_CONFIG_IDLE;
+      end
+      else begin
+         `uvm_info("RX_LTSSM","2ms timeout, fallback -> DETECT_QUIET",UVM_LOW)
+         ep_state = EP_DETECT_QUIET;
+      end
   endtask
 
   // ---- RC_MODE ----
   task rc_state_config_idle();
-  //     rc_idle = rc_TS1[103:96];
-      `uvm_info("TX_LTSSM","CONFIG_IDLE – sending rc_idle symbols",UVM_LOW)
-      // Idle = data 0x00000000 with data sync header 2'b10
-      repeat(1) begin
-        @(posedge rc_pvif.PCLK);
-      rc_tx_bcast_data({2'b01, 128'h0});
-        rc_tx_bcast_valid(1);
-      end
-      @(posedge rc_pvif.PCLK);
+
+      bit l0_ready;
+      bit timeout_occured;
+
+      `uvm_info("TX_LTSSM","Entered CONFIG_IDLE - sending Idle data Symbols",UVM_LOW)
+
+      l0_ready        = 0;
+      timeout_occured = 0;
+      rc_os_lane_delete();
+
+      // TODO: 8b/10b sends raw Idle Symbols directly; 128b/130b needs
+      // one SDS Ordered Set first to open the Data Stream (cfg field
+      // for encoding selection not yet modeled - both paths currently
+      // reuse the existing Idle-data broadcast below).
+      fork
+         begin
+            repeat(1)begin
+               @(posedge rc_pvif.PCLK);
+               rc_tx_bcast_data({2'b01, 128'h0});
+               rc_tx_bcast_valid(1);
+            end
+               @(posedge rc_pvif.PCLK);
+               rc_tx_bcast_valid(0);
+         end
+
+         begin
+            // TODO: real check - 8 consecutive Symbol Times of Idle
+            // data on ALL configured Lanes, AND >=16 Idle Symbols sent
+            // after receiving one Idle Symbol. rc_os_all_lanes_ready()
+            // is the stand-in activity check (requires every active
+            // lane's queue to be non-empty, not just lane 0) until a
+            // real per-Lane consecutive-idle-symbol tracker exists.
+            wait(rc_os_all_lanes_ready(0));
+            config_idle.wait_for();
+            `uvm_info("TX_LTSSM",$sformatf("Received rc_idle activity on all %0d active lanes in CONFIG_IDLE",cfg.num_lanes),UVM_LOW)
+            l0_ready = 1;
+            disable fork;
+         end
+
+         begin
+            rc_ltssm_timer(cfg.config_idle_timeout);   // TODO: add 2ms min timeout param to cfg
+            timeout_occured = 1;
+            disable fork;
+         end
+      join
+
       rc_tx_bcast_valid(0);
-  //     repeat(1) begin
-  //       @(posedge rc_pvif.PCLK);
-  //       rc_drive_os(rc_TS1);   
-  //     end
-  //     @(posedge rc_pvif.PCLK);
-  //      rc_pvif.TxDataValid <= 0;
-  //     tx_idle_done.trigger();
-  //     rx_idle_done.wait_trigger();
-      wait(rc_received_os.size()>0);
-          config_idle.wait_for();
-      `uvm_info("TX_LTSSM",$sformatf("Received %0d rc_idle symbol in CONFIG_IDLE",rc_received_os.size()),UVM_LOW)
-  //     if (rc_received_os.size() == 1) begin
-      `uvm_info("TX_LTSSM","Received 1 IDLE -> L0",UVM_LOW)
-      rc_received_os.delete();
-      rc_state = L0;
-  //   end
-  //   else begin
-  //     `uvm_error("TX_LTSSM","No IDLE rc_received -> DETECT_QUIET")
-  //     rc_received_os.delete();
-  //     rc_state = DETECT_QUIET;
-  //   end
+      rc_os_lane_delete();
+
+      if(l0_ready) begin
+         `uvm_info("TX_LTSSM","8x consecutive Idle + 16 sent-after-first -> L0",UVM_LOW)
+         rc_idle_to_rlock_transitioned = 8'h00;   // reset on transition to L0
+         rc_state = L0;
+         return;
+      end
+
+      // Minimum 2ms timeout - per 4.2.6.3.6.
+      if(rc_idle_to_rlock_transitioned < 8'hFF) begin
+         `uvm_info("TX_LTSSM",$sformatf("2ms timeout, idle_to_rlock_transitioned=%0h<FFh -> RECOVERY_RCVRLOCK",rc_idle_to_rlock_transitioned),UVM_LOW)
+         if(cfg.gen == 3)
+            rc_idle_to_rlock_transitioned = rc_idle_to_rlock_transitioned + 1'b1;
+         else
+            rc_idle_to_rlock_transitioned = 8'hFF;
+         rc_state = RECOVERY_RCVRLOCK;
+      end
+      else begin
+         `uvm_info("TX_LTSSM","2ms timeout, idle_to_rlock_transitioned=FFh -> DETECT_QUIET",UVM_LOW)
+         rc_state = DETECT_QUIET;
+      end
     endtask
 
   // ---- EP_MODE ----
   task ep_state_config_idle();
-  //       ep_idle = ep_TS1[103:96];
-      `uvm_info("RX_LTSSM","CONFIG_IDLE – sending ep_idle symbols",UVM_LOW)
-      repeat(1) begin
-  //       @(posedge ep_pvif.PCLK);
-  //     ep_drive_os(ep_TS1);
-        @(posedge ep_pvif.PCLK);
-        ep_tx_bcast_data({2'h01, 128'h0});
-        ep_tx_bcast_valid(1);
-      end
-      @(posedge ep_pvif.PCLK);
+
+      bit l0_ready;
+      bit timeout_occured;
+
+      `uvm_info("RX_LTSSM","Entered CONFIG_IDLE - sending Idle data Symbols",UVM_LOW)
+
+      l0_ready        = 0;
+      timeout_occured = 0;
+      ep_os_lane_delete();
+
+      fork
+         begin
+            repeat(1) begin
+               @(posedge ep_pvif.PCLK);
+               ep_tx_bcast_data({2'b01, 128'h0});
+               ep_tx_bcast_valid(1);
+            end
+               @(posedge ep_pvif.PCLK);
+               ep_tx_bcast_valid(0);
+         end
+
+         begin
+            // Requires an Idle OS to have been captured on every active
+            // lane (not just lane 0) before considering the link idle.
+            wait(ep_os_all_lanes_ready(0));
+            config_idle.wait_for();
+            `uvm_info("RX_LTSSM",$sformatf("Received ep_idle activity on all %0d active lanes in CONFIG_IDLE",cfg.num_lanes),UVM_LOW)
+            l0_ready = 1;
+            disable fork;
+         end
+
+         begin
+            ep_ltssm_timer(cfg.config_idle_timeout);   // TODO: add 2ms min timeout param to cfg
+            timeout_occured = 1;
+            disable fork;
+         end
+      join
+
       ep_tx_bcast_valid(0);
-  //     rx_idle_done.trigger();
-  //     tx_idle_done.wait_trigger();
-        wait(ep_os.size()>0);
-      config_idle.wait_for();
-      `uvm_info("RX_LTSSM",$sformatf("Received %0d ep_idle symbol in CONFIG_IDLE",ep_os.size()),UVM_LOW)
-  //     if (ep_os.size() == 1) begin
-      `uvm_info("RX_LTSSM","Received 1 IDLE -> L0",UVM_LOW)
-      ep_os.delete();
-      ep_state = EP_L0;
-  //   end
-  //   else begin
-  //     `uvm_error("RX_LTSSM","No IDLE ep_received -> DETECT_QUIET")
-  //     ep_os.delete();
-  //     ep_state = EP_DETECT_QUIET;
-  //   end
+      ep_os_lane_delete();
+
+      if(l0_ready) begin
+         `uvm_info("RX_LTSSM","8x consecutive Idle + 16 sent-after-first -> L0",UVM_LOW)
+         ep_idle_to_rlock_transitioned = 8'h00;
+         ep_state = EP_L0;
+         return;
+      end
+
+      if(ep_idle_to_rlock_transitioned < 8'hFF) begin
+         `uvm_info("RX_LTSSM",$sformatf("2ms timeout, idle_to_rlock_transitioned=%0h<FFh -> RECOVERY_RCVRLOCK",ep_idle_to_rlock_transitioned),UVM_LOW)
+         if(cfg.gen == 3)
+            ep_idle_to_rlock_transitioned = ep_idle_to_rlock_transitioned + 1'b1;
+         else
+            ep_idle_to_rlock_transitioned = 8'hFF;
+         ep_state = EP_RECOVERY_RCVRLOCK;
+      end
+      else begin
+         `uvm_info("RX_LTSSM","2ms timeout, idle_to_rlock_transitioned=FFh -> DETECT_QUIET",UVM_LOW)
+         ep_state = EP_DETECT_QUIET;
+      end
     endtask
 
   // ---- RC_MODE ----
@@ -1790,6 +2530,8 @@ endtask
       end
       else begin
          link_up_env.trigger();
+	    @(posedge rc_pvif.PCLK);
+               rc_vif.rc_link_up = 1;
          fork
   forever begin
       begin
@@ -1834,7 +2576,7 @@ endtask
       //rc_received.push_back(rc_sdp_packet[31:0]);
       rc_received.push_back(EDS);
       foreach(rc_received[i])
-        `uvm_info("PIPE_DRV",$sformatf("RC_SCRAMBLED_AFTER %0h",rc_received[i]),UVM_HIGH)
+        `uvm_info("PIPE_DRV",$sformatf("RC_SCRAMBLED_AFTER %0h",rc_received[i]),UVM_LOW)
 
       //rc_packet_encoding();
      // rc_received.delete();
@@ -1921,9 +2663,12 @@ endtask
         ep_state = EP_RECOVERY_RCVRLOCK;
       end
       else begin
-           link_up_env_rx.trigger();
+        //   link_up_env_rx.trigger();
+	   @(posedge ep_pvif.PCLK);
+               ep_vif.ep_link_up = 1;
+
 	      `uvm_info("RX_LTSSM",
-          $sformatf("Speed mismatch: running Gen%0d, negotiated Gen%0d -> RECOVERY",
+          $sformatf("Speed match: running Gen%0d, negotiated Gen%0d -> RECOVERY",
                      ep_active_gen, ep_negotiated_gen), UVM_LOW)
       fork
   forever begin 
@@ -2070,182 +2815,833 @@ endtask
 int unsigned rc_target_gen;
 
 task rc_state_recovery_rcvrlock();
+
+    bit barrier_met;
+    bit timeout_occured;
+
+    // directed_speed_change: this side's intent to change speed. Set
+    // here from active<negotiated on the first pass into Recovery.
+    // TODO: also OR in "received TS Ordered Set had speed_change=1b"
+    // once exact field-decode RX checking exists.
+    if(rc_active_gen < rc_negotiated_gen)
+       rc_directed_speed_change = 1'b1;
+
     `uvm_info("TX_LTSSM",
-      $sformatf("Recovery.RcvrLock - relocking @ Gen%0d (negotiated Gen%0d)",
-                 rc_active_gen, rc_negotiated_gen), UVM_LOW)
+      $sformatf("Recovery.RcvrLock - relocking @ Gen%0d (negotiated Gen%0d, directed_speed_change=%0b)",
+                 rc_active_gen, rc_negotiated_gen, rc_directed_speed_change), UVM_LOW)
 
+    barrier_met     = 0;
+    timeout_occured = 0;
     rc_pvif.TxElecIdle <= '0;
-    repeat(8) begin
-      @(posedge rc_pvif.PCLK);
-      rc_drive_os(tag_ts1(rc_TS1));   // TS1 @ CURRENT speed, no speed_change bit
-    end
-    @(posedge rc_pvif.PCLK);
+    rc_os_lane_delete();
+
+    fork
+       //--------------------------------------------------------
+       // TX: TS1 @ current speed, speed_change bit reflects
+       // directed_speed_change (not hardcoded to 0 anymore), Link/
+       // Lane numbers carried over from Configuration.
+       //--------------------------------------------------------
+       begin
+          repeat(8) begin
+             @(posedge rc_pvif.PCLK);
+             rc_drive_os(tag_ts1(rc_TS1, rc_directed_speed_change,
+                                  rc_negotiated_link_num, rc_negotiated_lane_num));
+          end
+          @(posedge rc_pvif.PCLK);
+          rc_tx_bcast_valid(0);
+       end
+
+       //--------------------------------------------------------
+       // RX: 8-consecutive TS1/TS2 on ALL configured Lanes with
+       // Link+Lane matching transmitted, speed_change == directed.
+       //--------------------------------------------------------
+       begin
+          wait(rc_os_all_lanes_ready(7));   // TODO: real Link+Lane+
+                                             // speed_change field match
+                                             // on all Lanes, not just
+                                             // queue depth
+          recovery_rcvrlock.wait_for();
+          barrier_met = 1;
+          disable fork;
+       end
+
+       //--------------------------------------------------------
+       // 24ms overall timeout
+       //--------------------------------------------------------
+       begin
+          rc_ltssm_timer(cfg.recovery_rcvrlock_timeout);   // TODO: add 24ms timeout param to cfg
+          timeout_occured = 1;
+          disable fork;
+       end
+    join
+
     rc_tx_bcast_valid(0);
+    rc_os_lane_delete();
 
-    wait(rc_received_os.size() > 0);
-    recovery_rcvrlock.wait_for();
-    rc_received_os.delete();
+    if(barrier_met) begin
+       `uvm_info("TX_LTSSM","Recovery.RcvrLock done (fast match) -> Recovery.RcvrCfg",UVM_LOW)
+       rc_state = RECOVERY_RCVRCFG;
+       return;
+    end
 
-    `uvm_info("TX_LTSSM","Recovery.RcvrLock done -> Recovery.RcvrCfg",UVM_LOW)
-    rc_state = RECOVERY_RCVRCFG;
+    // 24ms timeout - Equalization/EC-related sub-branch omitted per
+    // instruction; falls straight to the revert-speed / Configuration
+    // / Detect tree.
+    if(!rc_changed_speed_recovery && rc_active_gen > 1) begin
+       `uvm_info("TX_LTSSM","24ms timeout, no speed change yet this Recovery pass, rate>2.5GT/s -> Recovery.Speed (revert to Gen1/2.5GT/s)",UVM_LOW)
+       rc_target_gen = 1;
+       rc_state = RECOVERY_SPEED;
+       return;
+    end
+
+    if(rc_changed_speed_recovery) begin
+       `uvm_info("TX_LTSSM",
+          $sformatf("24ms timeout, already changed speed this Recovery pass -> Recovery.Speed (revert to Gen%0d, entry speed)",
+                     rc_gen_on_recovery_entry), UVM_LOW)
+       rc_target_gen = rc_gen_on_recovery_entry;
+       rc_state = RECOVERY_SPEED;
+       return;
+    end
+
+    `uvm_info("TX_LTSSM","24ms timeout, no conditions met -> DETECT_QUIET",UVM_LOW)
+    rc_state = DETECT_QUIET;
 endtask
 
 task rc_state_recovery_rcvrcfg();
-    bit speed_change;
-    speed_change = (rc_active_gen < rc_negotiated_gen);
 
+    bit path_to_speed;   // -> Recovery.Speed (successful speed negotiation)
+    bit path_to_idle;    // -> Recovery.Idle
+    bit timeout_occured;
+
+    // Per spec 4.2.6.4.4: speed_change bit reflects directed_speed_change
+    // as already set on entry (from RcvrLock), not recomputed here.
     `uvm_info("TX_LTSSM",
-      $sformatf("Recovery.RcvrCfg - advertising TS2s (speed_change=%0b)", speed_change), UVM_LOW)
+      $sformatf("Recovery.RcvrCfg - advertising TS2s (speed_change=%0b)", rc_directed_speed_change), UVM_LOW)
 
-    repeat(8) begin
-      @(posedge rc_pvif.PCLK);
-      rc_drive_os(tag_ts1(TS2, speed_change));
-    end
-    @(posedge rc_pvif.PCLK);
+    path_to_speed   = 0;
+    path_to_idle    = 0;
+    timeout_occured = 0;
+    rc_os_lane_delete();
+
+    fork
+       //--------------------------------------------------------
+       // TX: TS2 on all configured Lanes, Link/Lane from
+       // Configuration, speed_change = directed_speed_change.
+       //--------------------------------------------------------
+       begin
+          repeat(16) begin
+             @(posedge rc_pvif.PCLK);
+             rc_drive_os(tag_ts2(TS2, rc_directed_speed_change,
+                                  rc_negotiated_link_num, rc_negotiated_lane_num));
+          end
+          @(posedge rc_pvif.PCLK);
+          rc_tx_bcast_valid(0);
+       end
+
+       //--------------------------------------------------------
+       // RX: 8-consecutive-match trigger, then classify.
+       // TODO: this single combined trigger stands in for the
+       // spec's textually distinct conditions (i) speed-change path
+       // vs the Recovery.Idle / Configuration paths, which need real
+       // field-level Link/Lane/speed_change comparison to tell apart.
+       // Classified here by directed_speed_change alone: speed change
+       // requested -> path_to_speed; otherwise -> path_to_idle (the
+       // common/expected case).
+       //--------------------------------------------------------
+       begin
+          wait(rc_os_all_lanes_ready(7));   // TODO: real 8-consecutive match
+          `uvm_info("MAC_TX_DRV",$sformatf("wait_completed RC_ORDERED_SETS %0d DWORDs",rc_received_os_lane[0].size()),UVM_LOW)
+
+          recovery_rcvrcfg.wait_for();
+
+          if(rc_directed_speed_change)
+             path_to_speed = 1;
+          else
+             path_to_idle = 1;
+          disable fork;
+       end
+
+       //--------------------------------------------------------
+       // 48ms overall timeout
+       //--------------------------------------------------------
+       begin
+          rc_ltssm_timer(cfg.recovery_rcvrcfg_timeout);   // TODO: add 48ms timeout param to cfg
+          timeout_occured = 1;
+          disable fork;
+       end
+    join
+
     rc_tx_bcast_valid(0);
+    rc_os_lane_delete();
 
-    wait(rc_received_os.size() > 0);
-    recovery_rcvrcfg.wait_for();
-    rc_received_os.delete();
+    if(path_to_speed) begin
+       rc_target_gen = rc_active_gen + 1;
+       rc_successful_speed_negotiation = 1'b1;
+       `uvm_info("TX_LTSSM",
+          $sformatf("Recovery.RcvrCfg -> Recovery.Speed (successful, Gen%0d -> Gen%0d)",
+                     rc_active_gen, rc_target_gen), UVM_LOW)
+       rc_state = RECOVERY_SPEED;
+       return;
+    end
 
-    if (speed_change) begin
-      rc_target_gen = rc_active_gen + 1;
-      `uvm_info("TX_LTSSM",
-        $sformatf("Recovery.RcvrCfg done -> Recovery.Speed (Gen%0d -> Gen%0d)",
-                   rc_active_gen, rc_target_gen), UVM_LOW)
-      rc_state = RECOVERY_SPEED;
+    if(path_to_idle) begin
+       rc_changed_speed_recovery = 1'b0;
+       rc_directed_speed_change  = 1'b0;
+       rc_recovery_idle_via_rcvrcfg_timeout = 1'b0;
+       `uvm_info("TX_LTSSM","Recovery.RcvrCfg -> Recovery.Idle",UVM_LOW)
+       rc_state = RECOVERY_IDLE;
+       return;
+    end
+
+    // 48ms timeout branch
+    if(cfg.gen == 1 || cfg.gen == 2) begin
+       `uvm_info("TX_LTSSM","48ms timeout at Gen1/Gen2 -> DETECT_QUIET",UVM_LOW)
+       rc_state = DETECT_QUIET;
+    end
+    else if(cfg.gen == 3 && rc_idle_to_rlock_transitioned < 8'hFF) begin
+       `uvm_info("TX_LTSSM","48ms timeout, Gen3, idle_to_rlock_transitioned<FFh -> Recovery.Idle",UVM_LOW)
+       rc_changed_speed_recovery = 1'b0;
+       rc_directed_speed_change  = 1'b0;
+       rc_recovery_idle_via_rcvrcfg_timeout = 1'b1;
+       rc_state = RECOVERY_IDLE;
     end
     else begin
-      `uvm_info("TX_LTSSM","Recovery.RcvrCfg done -> Recovery.Idle (no speed change needed)",UVM_LOW)
-      rc_state = RECOVERY_IDLE;
+       `uvm_info("TX_LTSSM","48ms timeout, fallback -> DETECT_QUIET",UVM_LOW)
+       rc_state = DETECT_QUIET;
     end
 endtask
 
 task rc_state_recovery_speed();
-    rc_pvif.TxElecIdle  <= cfg.active_lane_mask;
-    rc_tx_bcast_valid(0);
-    rc_pvif.Rate        <= gen_to_rate_code(rc_target_gen);
-    rc_active_gen         = rc_target_gen;
 
-    recovery_speed.wait_for();
-    repeat(4) @(posedge rc_pvif.PCLK);   // let PCLK settle at the new rate
-    rc_pvif.TxElecIdle <= '0;
+    bit timeout_occurred;
+    bit speed_done;
+
+    timeout_occurred = 0;
+    speed_done       = 0;
 
     `uvm_info("TX_LTSSM",
-      $sformatf("Recovery.Speed done -> now running at Gen%0d -> Recovery.RcvrLock (re-lock)",
-                 rc_active_gen), UVM_LOW)
+        $sformatf(
+            "Recovery.Speed - entering Electrical Idle " +
+            "(successful_speed_negotiation=%0b, changed_speed_recovery=%0b)",
+            rc_successful_speed_negotiation,
+            rc_changed_speed_recovery
+        ),
+        UVM_LOW
+    );
 
-    // Per diagram: Speed always loops back to RcvrLock to re-lock at the new speed
-    rc_state = RECOVERY_RCVRLOCK;
+    //---------------------------------------------------------
+    // Enter Electrical Idle
+    //---------------------------------------------------------
+    rc_pvif.TxElecIdle <= cfg.active_lane_mask;
+    rc_tx_bcast_valid(0);
+
+    //---------------------------------------------------------
+    // Decide target Gen
+    //---------------------------------------------------------
+    if (rc_successful_speed_negotiation) begin
+
+        rc_active_gen = rc_target_gen;
+        rc_changed_speed_recovery = 1'b1;
+
+        `uvm_info("TX_LTSSM",
+            $sformatf(
+                "Recovery.Speed: successful negotiation -> Gen%0d",
+                rc_active_gen
+            ),
+            UVM_LOW
+        );
+
+    end
+    else if (rc_changed_speed_recovery) begin
+
+        rc_active_gen = rc_gen_on_recovery_entry;
+        rc_changed_speed_recovery = 1'b0;
+
+        `uvm_info("TX_LTSSM",
+            $sformatf(
+                "Recovery.Speed: reverting to entry Gen%0d",
+                rc_active_gen
+            ),
+            UVM_LOW
+        );
+
+    end
+    else begin
+
+        rc_active_gen = 1;
+
+        `uvm_info("TX_LTSSM",
+            "Recovery.Speed: falling back to Gen1",
+            UVM_LOW
+        );
+
+    end
+
+    //---------------------------------------------------------
+    // Change rate while in Electrical Idle
+    //---------------------------------------------------------
+    rc_pvif.Rate <= gen_to_rate_code(rc_active_gen);
+
+    `uvm_info("TX_LTSSM",
+        $sformatf(
+            "Recovery.Speed: Rate changed to Gen%0d",
+            rc_active_gen
+        ),
+        UVM_LOW
+    );
+
+    fork : RECOVERY_SPEED_TIMEOUT
+
+        begin : SPEED_COMPLETE
+
+            // PHY settle time
+            #(cfg.recovery_speed_settle_time);
+
+            speed_done = 1'b1;
+
+        end
+
+        begin : SPEED_TIMEOUT
+
+            rc_ltssm_timer(cfg.recovery_speed_timeout);
+
+            timeout_occurred = 1'b1;
+
+        end
+
+    join_any
+
+    //---------------------------------------------------------
+    // Kill whichever branch is still running
+    //---------------------------------------------------------
+    disable RECOVERY_SPEED_TIMEOUT;
+
+    //---------------------------------------------------------
+    // Timeout case
+    //---------------------------------------------------------
+    if (timeout_occurred && !speed_done) begin
+
+        `uvm_info("TX_LTSSM",
+            "48ms timeout in Recovery.Speed (abnormal) -> DETECT_QUIET",
+            UVM_LOW
+        );
+
+        rc_pvif.TxElecIdle <= '0;
+        rc_directed_speed_change = 1'b0;
+
+        rc_state = DETECT_QUIET;
+
+        return;
+    end
+
+    //---------------------------------------------------------
+    // Successful completion
+    //---------------------------------------------------------
+    if (speed_done) begin
+
+        rc_pvif.TxElecIdle <= '0;
+        rc_directed_speed_change = 1'b0;
+
+        `uvm_info("TX_LTSSM",$sformatf("Recovery.Speed done -> now running Gen%0d -> Recovery.RcvrLock",rc_active_gen),UVM_LOW);
+
+        rc_state = RECOVERY_RCVRLOCK;
+
+        return;
+    end
+
 endtask
 
-task rc_state_recovery_idle();
-    repeat(8) begin
-      @(posedge rc_pvif.PCLK);
-      rc_tx_bcast_data({2'b01, 128'h0});
-      rc_tx_bcast_valid(1);
-    end
-    @(posedge rc_pvif.PCLK);
-    rc_tx_bcast_valid(0);
 
-    wait(rc_received_os.size() > 0);
-    recovery_idle_bar.wait_for();
-    rc_received_os.delete();
+task rc_state_recovery_idle();
+
+    bit l0_ready;
+    bit config_ready;    // PAD-Lane detected -> Configuration
+    bit timeout_occured;
 
     `uvm_info("TX_LTSSM",
-      $sformatf("Recovery.Idle done -> L0 @ Gen%0d (final speed reached)", rc_active_gen), UVM_LOW)
-    rc_state = L0;
+      $sformatf("Entered Recovery.Idle @ Gen%0d (via_rcvrcfg_timeout=%0b)",
+                 rc_active_gen, rc_recovery_idle_via_rcvrcfg_timeout), UVM_LOW)
+
+    // NOTE: Disabled / Hot Reset / Loopback and all "if directed"
+    // higher-Layer transitions are intentionally not modeled - only
+    // the Idle->L0 and Idle->Configuration (PAD-Lane) paths below.
+
+   
+    if(cfg.link_ctrl_hot_reset)
+    begin
+       `uvm_info("TX_LTSSM","Hot Reset directed -> immediate HOT_RESET",UVM_LOW)
+       rc_state = HOT_RESET;
+       return;
+    end
+
+    l0_ready        = 0;
+    config_ready    = 0;
+    timeout_occured = 0;
+    rc_os_lane_delete();
+
+    fork
+       begin
+          repeat(1) begin
+             @(posedge rc_pvif.PCLK);
+             rc_tx_bcast_data({2'b01, 128'h0});
+             rc_tx_bcast_valid(1);
+          end
+          @(posedge rc_pvif.PCLK);
+          rc_tx_bcast_valid(0);
+       end
+
+       //--------------------------------------------------------
+       // L0 condition: 8-consecutive Idle Symbol Times on ALL
+       // configured Lanes. For 128b/130b, additionally disqualified
+       // if this substate was entered via RcvrCfg's 48ms timeout.
+       //--------------------------------------------------------
+       begin
+          wait(rc_os_all_lanes_ready(0));   // TODO: real per-Lane
+                                             // consecutive-idle-symbol
+                                             // tracker, same gap as
+                                             // CONFIG_IDLE
+
+          recovery_idle_bar.wait_for();
+          l0_ready = 1;
+          disable fork;
+       end
+
+       //--------------------------------------------------------
+       // Configuration condition: 2 consecutive TS1 received on any
+       // configured Lane with Lane number == PAD.
+       //--------------------------------------------------------
+   //    begin
+   //       wait(0);   // TODO: needs a real PAD-Lane field check on
+   //                  // rc_received_os_lane entries - no such decode
+   //                  // exists yet.
+   //       config_ready = 1;
+   //       disable fork;
+   //    end
+
+       begin
+          rc_ltssm_timer(cfg.recovery_idle_timeout);   // TODO: add 2ms timeout param to cfg
+          timeout_occured = 1;
+          disable fork;
+       end
+    join
+
+    rc_tx_bcast_valid(0);
+    rc_os_lane_delete();
+
+    if(l0_ready) begin
+       `uvm_info("TX_LTSSM","Recovery.Idle: 8x consecutive Idle -> L0",UVM_LOW)
+       rc_idle_to_rlock_transitioned = 8'h00;   // reset on transition to L0
+       rc_state = L0;
+       return;
+    end
+
+    if(config_ready) begin
+       `uvm_info("TX_LTSSM","Recovery.Idle: PAD-Lane TS1 detected -> Configuration",UVM_LOW)
+       rc_state = CONFIG_LINKNUM_START;
+       return;
+    end
+
+    // 2ms timeout
+    if(rc_idle_to_rlock_transitioned < 8'hFF) begin
+       `uvm_info("TX_LTSSM",$sformatf("2ms timeout, idle_to_rlock_transitioned=%0h<FFh -> Recovery.RcvrLock",rc_idle_to_rlock_transitioned),UVM_LOW)
+       if(cfg.gen == 3)
+          rc_idle_to_rlock_transitioned = rc_idle_to_rlock_transitioned + 1'b1;
+       else   // 5.0 GT/s (or 2.5 GT/s if supported)
+          rc_idle_to_rlock_transitioned = 8'hFF;
+       rc_state = RECOVERY_RCVRLOCK;
+    end
+    else begin
+       `uvm_info("TX_LTSSM","2ms timeout, idle_to_rlock_transitioned=FFh -> DETECT_QUIET",UVM_LOW)
+       rc_state = DETECT_QUIET;
+    end
 endtask
 
 // ---- EP_MODE ----
 int unsigned ep_target_gen;
 
 task ep_state_recovery_rcvrlock();
+
+    bit barrier_met;
+    bit timeout_occured;
+
+    if(ep_active_gen < ep_negotiated_gen)
+       ep_directed_speed_change = 1'b1;
+
     `uvm_info("RX_LTSSM",
-      $sformatf("Recovery.RcvrLock - relocking @ Gen%0d (negotiated Gen%0d)",
-                 ep_active_gen, ep_negotiated_gen), UVM_LOW)
+      $sformatf("Recovery.RcvrLock - relocking @ Gen%0d (negotiated Gen%0d, directed_speed_change=%0b)",
+                 ep_active_gen, ep_negotiated_gen, ep_directed_speed_change), UVM_LOW)
 
+    barrier_met     = 0;
+    timeout_occured = 0;
     ep_pvif.TxElecIdle <= '0;
-    repeat(8) begin
-      @(posedge ep_pvif.PCLK);
-      ep_drive_os(tag_ts1(ep_TS1));   // TS1 @ CURRENT speed, no speed_change bit
-    end
-    @(posedge ep_pvif.PCLK);
+    ep_os_lane_delete();
+
+    fork
+       begin
+          repeat(8) begin
+             @(posedge ep_pvif.PCLK);
+             ep_drive_os(tag_ts1(ep_TS1, ep_directed_speed_change,
+                                  ep_negotiated_link_num, ep_negotiated_lane_num));
+          end
+          @(posedge ep_pvif.PCLK);
+          ep_tx_bcast_valid(0);
+       end
+
+       begin
+          wait(ep_os_all_lanes_ready(7));   // TODO: real field match
+          recovery_rcvrlock.wait_for();
+          barrier_met = 1;
+          disable fork;
+       end
+
+       begin
+          ep_ltssm_timer(cfg.recovery_rcvrlock_timeout);   // TODO: add 24ms timeout param to cfg
+          timeout_occured = 1;
+          disable fork;
+       end
+    join
+
     ep_tx_bcast_valid(0);
+    ep_os_lane_delete();
 
-    wait(ep_os.size() > 0);
-    recovery_rcvrlock.wait_for();
-    ep_os.delete();
+    if(barrier_met) begin
+       `uvm_info("RX_LTSSM","Recovery.RcvrLock done (fast match) -> Recovery.RcvrCfg",UVM_LOW)
+       ep_state = EP_RECOVERY_RCVRCFG;
+       return;
+    end
 
-    `uvm_info("RX_LTSSM","Recovery.RcvrLock done -> Recovery.RcvrCfg",UVM_LOW)
-    ep_state = EP_RECOVERY_RCVRCFG;
+    if(!ep_changed_speed_recovery && ep_active_gen > 1) begin
+       `uvm_info("RX_LTSSM","24ms timeout, no speed change yet this Recovery pass, rate>2.5GT/s -> Recovery.Speed (revert to Gen1/2.5GT/s)",UVM_LOW)
+       ep_target_gen = 1;
+       ep_state = EP_RECOVERY_SPEED;
+       return;
+    end
+
+    if(ep_changed_speed_recovery) begin
+       `uvm_info("RX_LTSSM",
+          $sformatf("24ms timeout, already changed speed this Recovery pass -> Recovery.Speed (revert to Gen%0d, entry speed)",
+                     ep_gen_on_recovery_entry), UVM_LOW)
+       ep_target_gen = ep_gen_on_recovery_entry;
+       ep_state = EP_RECOVERY_SPEED;
+       return;
+    end
+
+    `uvm_info("RX_LTSSM","24ms timeout, no conditions met -> DETECT_QUIET",UVM_LOW)
+    ep_state = EP_DETECT_QUIET;
 endtask
 
 task ep_state_recovery_rcvrcfg();
-    bit speed_change;
-    speed_change = (ep_active_gen < ep_negotiated_gen);
+
+    bit path_to_speed;
+    bit path_to_idle;
+    bit timeout_occured;
 
     `uvm_info("RX_LTSSM",
-      $sformatf("Recovery.RcvrCfg - advertising TS2s (speed_change=%0b)", speed_change), UVM_LOW)
+      $sformatf("Recovery.RcvrCfg - advertising TS2s (speed_change=%0b)", ep_directed_speed_change), UVM_LOW)
 
-    repeat(8) begin
-      @(posedge ep_pvif.PCLK);
-      ep_drive_os(tag_ts1(TS2, speed_change));
-    end
-    @(posedge ep_pvif.PCLK);
+    path_to_speed   = 0;
+    path_to_idle    = 0;
+    timeout_occured = 0;
+    ep_os_lane_delete();
+
+    fork
+       begin
+          repeat(16) begin
+             @(posedge ep_pvif.PCLK);
+             ep_drive_os(tag_ts2(TS2, ep_directed_speed_change,
+                                  ep_negotiated_link_num, ep_negotiated_lane_num));
+          end
+          @(posedge ep_pvif.PCLK);
+          ep_tx_bcast_valid(0);
+       end
+
+       begin
+          wait(ep_os_all_lanes_ready(7));   // TODO: real 8-consecutive match
+          recovery_rcvrcfg.wait_for();
+
+          if(ep_directed_speed_change)
+             path_to_speed = 1;
+          else
+             path_to_idle = 1;
+          disable fork;
+       end
+
+       begin
+          ep_ltssm_timer(cfg.recovery_rcvrcfg_timeout);   // TODO: add 48ms timeout param to cfg
+          timeout_occured = 1;
+          disable fork;
+       end
+    join
+
     ep_tx_bcast_valid(0);
+    ep_os_lane_delete();
 
-    wait(ep_os.size() > 0);
-    recovery_rcvrcfg.wait_for();
-    ep_os.delete();
+    if(path_to_speed) begin
+       ep_target_gen = ep_active_gen + 1;
+       ep_successful_speed_negotiation = 1'b1;
+       `uvm_info("RX_LTSSM",
+          $sformatf("Recovery.RcvrCfg -> Recovery.Speed (successful, Gen%0d -> Gen%0d)",
+                     ep_active_gen, ep_target_gen), UVM_LOW)
+       ep_state = EP_RECOVERY_SPEED;
+       return;
+    end
 
-    if (speed_change) begin
-      ep_target_gen = ep_active_gen + 1;
-      `uvm_info("RX_LTSSM",
-        $sformatf("Recovery.RcvrCfg done -> Recovery.Speed (Gen%0d -> Gen%0d)",
-                   ep_active_gen, ep_target_gen), UVM_LOW)
-      ep_state = EP_RECOVERY_SPEED;
+    if(path_to_idle) begin
+       ep_changed_speed_recovery = 1'b0;
+       ep_directed_speed_change  = 1'b0;
+       ep_recovery_idle_via_rcvrcfg_timeout = 1'b0;
+       `uvm_info("RX_LTSSM","Recovery.RcvrCfg -> Recovery.Idle",UVM_LOW)
+       ep_state = EP_RECOVERY_IDLE;
+       return;
+    end
+
+    if(cfg.gen == 1 || cfg.gen == 2) begin
+       `uvm_info("RX_LTSSM","48ms timeout at Gen1/Gen2 -> DETECT_QUIET",UVM_LOW)
+       ep_state = EP_DETECT_QUIET;
+    end
+    else if(cfg.gen == 3 && ep_idle_to_rlock_transitioned < 8'hFF) begin
+       `uvm_info("RX_LTSSM","48ms timeout, Gen3, idle_to_rlock_transitioned<FFh -> Recovery.Idle",UVM_LOW)
+       ep_changed_speed_recovery = 1'b0;
+       ep_directed_speed_change  = 1'b0;
+       ep_recovery_idle_via_rcvrcfg_timeout = 1'b1;
+       ep_state = EP_RECOVERY_IDLE;
     end
     else begin
-      `uvm_info("RX_LTSSM","Recovery.RcvrCfg done -> Recovery.Idle (no speed change needed)",UVM_LOW)
-      ep_state = EP_RECOVERY_IDLE;
+       `uvm_info("RX_LTSSM","48ms timeout, fallback -> DETECT_QUIET",UVM_LOW)
+       ep_state = EP_DETECT_QUIET;
     end
 endtask
 
 task ep_state_recovery_speed();
-    ep_pvif.TxElecIdle  <= cfg.active_lane_mask;
-    ep_tx_bcast_valid(0);
-    ep_pvif.Rate        <= gen_to_rate_code(ep_target_gen);
-    ep_active_gen         = ep_target_gen;
 
-    recovery_speed.wait_for();
-    repeat(4) @(posedge ep_pvif.PCLK);   // let PCLK settle at the new rate
-    ep_pvif.TxElecIdle <= '0;
+    bit timeout_occurred;
+    bit speed_done;
+
+    timeout_occurred = 0;
+    speed_done       = 0;
 
     `uvm_info("RX_LTSSM",
-      $sformatf("Recovery.Speed done -> now running at Gen%0d -> Recovery.RcvrLock (re-lock)",
-                 ep_active_gen), UVM_LOW)
+        $sformatf(
+            "Recovery.Speed - entering Electrical Idle " +
+            "(successful_speed_negotiation=%0b, changed_speed_recovery=%0b)",
+            ep_successful_speed_negotiation,
+            ep_changed_speed_recovery
+        ),
+        UVM_LOW
+    );
 
-    // Per diagram: Speed always loops back to RcvrLock to re-lock at the new speed
-    ep_state = EP_RECOVERY_RCVRLOCK;
+    //---------------------------------------------------------
+    // Enter Electrical Idle
+    //---------------------------------------------------------
+    ep_pvif.TxElecIdle <= cfg.active_lane_mask;
+    ep_tx_bcast_valid(0);
+
+    //---------------------------------------------------------
+    // Decide target Gen
+    //---------------------------------------------------------
+    if (ep_successful_speed_negotiation) begin
+
+        ep_active_gen = ep_target_gen;
+        ep_changed_speed_recovery = 1'b1;
+
+        `uvm_info("RX_LTSSM",
+            $sformatf(
+                "Recovery.Speed: successful negotiation -> Gen%0d",
+                ep_active_gen
+            ),
+            UVM_LOW
+        );
+
+    end
+    else if (ep_changed_speed_recovery) begin
+
+        ep_active_gen = ep_gen_on_recovery_entry;
+        ep_changed_speed_recovery = 1'b0;
+
+        `uvm_info("RX_LTSSM",
+            $sformatf(
+                "Recovery.Speed: reverting to entry Gen%0d",
+                ep_active_gen
+            ),
+            UVM_LOW
+        );
+
+    end
+    else begin
+
+        ep_active_gen = 1;
+
+        `uvm_info("RX_LTSSM",
+            "Recovery.Speed: falling back to Gen1",
+            UVM_LOW
+        );
+
+    end
+
+    //---------------------------------------------------------
+    // Change rate while in Electrical Idle
+    //---------------------------------------------------------
+    ep_pvif.Rate <= gen_to_rate_code(ep_active_gen);
+
+    `uvm_info("RX_LTSSM",
+        $sformatf(
+            "Recovery.Speed: Rate changed to Gen%0d",
+            ep_active_gen
+        ),
+        UVM_LOW
+    );
+
+    //---------------------------------------------------------
+    // Recovery.Speed completion / timeout
+    //---------------------------------------------------------
+    fork : RECOVERY_SPEED_TIMEOUT
+
+        begin : SPEED_COMPLETE
+
+            #(cfg.recovery_speed_settle_time);
+
+            speed_done = 1'b1;
+
+        end
+
+        begin : SPEED_TIMEOUT
+
+            ep_ltssm_timer(cfg.recovery_speed_timeout);
+
+            timeout_occurred = 1'b1;
+
+        end
+
+    join_any
+
+    //---------------------------------------------------------
+    // Stop remaining fork branch
+    //---------------------------------------------------------
+    disable RECOVERY_SPEED_TIMEOUT;
+
+    //---------------------------------------------------------
+    // Timeout
+    //---------------------------------------------------------
+    if (timeout_occurred && !speed_done) begin
+
+        `uvm_info("RX_LTSSM",
+            "48ms timeout in Recovery.Speed (abnormal) -> DETECT_QUIET",
+            UVM_LOW
+        );
+
+        ep_pvif.TxElecIdle <= '0;
+        ep_directed_speed_change = 1'b0;
+
+        ep_state = EP_DETECT_QUIET;
+
+        return;
+    end
+
+    //---------------------------------------------------------
+    // Successful completion
+    //---------------------------------------------------------
+    if (speed_done) begin
+
+        ep_pvif.TxElecIdle <= '0;
+        ep_directed_speed_change = 1'b0;
+
+        `uvm_info("RX_LTSSM",
+            $sformatf(
+                "Recovery.Speed done -> now running Gen%0d -> Recovery.RcvrLock",
+                ep_active_gen
+            ),
+            UVM_LOW
+        );
+
+        ep_state = EP_RECOVERY_RCVRLOCK;
+
+        return;
+    end
+
 endtask
 
 task ep_state_recovery_idle();
-    repeat(8) begin
-      @(posedge ep_pvif.PCLK);
-      ep_tx_bcast_data({2'b01, 128'h0});
-      ep_tx_bcast_valid(1);
-    end
-    @(posedge ep_pvif.PCLK);
-    ep_tx_bcast_valid(0);
 
-    wait(ep_os.size() > 0);
-    recovery_idle_bar.wait_for();
-    ep_os.delete();
+    bit l0_ready;
+    bit config_ready;
+    bit timeout_occured;
 
     `uvm_info("RX_LTSSM",
-      $sformatf("Recovery.Idle done -> L0 @ Gen%0d (final speed reached)", ep_active_gen), UVM_LOW)
-    ep_state = EP_L0;
+      $sformatf("Entered Recovery.Idle @ Gen%0d (via_rcvrcfg_timeout=%0b)",
+                 ep_active_gen, ep_recovery_idle_via_rcvrcfg_timeout), UVM_LOW)
+    if(cfg.link_ctrl_hot_reset)
+    begin
+       `uvm_info("RX_LTSSM","Hot Reset TS1s received (modeled) -> immediate EP_HOT_RESET",UVM_LOW)
+       ep_state = EP_HOT_RESET;
+       return;
+    end
+
+
+    l0_ready        = 0;
+    config_ready    = 0;
+    timeout_occured = 0;
+    ep_os_lane_delete();
+
+    fork
+       begin
+          repeat(1) begin
+             @(posedge ep_pvif.PCLK);
+             ep_tx_bcast_data({2'b01, 128'h0});
+             ep_tx_bcast_valid(1);
+          end
+          @(posedge ep_pvif.PCLK);
+          ep_tx_bcast_valid(0);
+       end
+
+       begin
+          wait(ep_os_all_lanes_ready(0));   // TODO: real per-Lane idle tracker
+
+          recovery_idle_bar.wait_for();
+          l0_ready = 1;
+          disable fork;
+       end
+
+   //    begin
+   //       wait(0);   // TODO: PAD-Lane field check not modeled - see RC side
+   //       config_ready = 1;
+   //       disable fork;
+   //    end
+
+       begin
+          ep_ltssm_timer(cfg.recovery_idle_timeout);   // TODO: add 2ms timeout param to cfg
+          timeout_occured = 1;
+          disable fork;
+       end
+    join
+
+    ep_tx_bcast_valid(0);
+    ep_os_lane_delete();
+
+    if(l0_ready) begin
+       `uvm_info("RX_LTSSM","Recovery.Idle: 8x consecutive Idle -> L0",UVM_LOW)
+       ep_idle_to_rlock_transitioned = 8'h00;
+       ep_state = EP_L0;
+       return;
+    end
+
+    if(config_ready) begin
+       `uvm_info("RX_LTSSM","Recovery.Idle: PAD-Lane TS1 detected -> Configuration",UVM_LOW)
+       ep_state = EP_CONFIG_LINKNUM_START;
+       return;
+    end
+
+    if(ep_idle_to_rlock_transitioned < 8'hFF) begin
+       `uvm_info("RX_LTSSM",$sformatf("2ms timeout, idle_to_rlock_transitioned=%0h<FFh -> Recovery.RcvrLock",ep_idle_to_rlock_transitioned),UVM_LOW)
+       if(ep_active_gen == 3)
+          ep_idle_to_rlock_transitioned = ep_idle_to_rlock_transitioned + 1'b1;
+       else
+          ep_idle_to_rlock_transitioned = 8'hFF;
+       ep_state = EP_RECOVERY_RCVRLOCK;
+    end
+    else begin
+       `uvm_info("RX_LTSSM","2ms timeout, idle_to_rlock_transitioned=FFh -> DETECT_QUIET",UVM_LOW)
+       ep_state = EP_DETECT_QUIET;
+    end
 endtask
 
   // ---- RC_MODE ----
@@ -2334,6 +3730,419 @@ endtask
      ep_state = EP_DETECT_ACTIVE;
 
   endtask
+  task rc_state_disabled();
+
+     int unsigned eios_beats;
+     bit          rx_eios_seen;
+
+     `uvm_info("TX_LTSSM","Entered DISABLED - broadcasting TS1 with Disable Link asserted",UVM_LOW)
+
+     rc_os_lane_delete();
+     rx_eios_seen = 0;
+
+     fork
+        begin
+           repeat(cfg.disabled_ts1_count) begin
+              @(posedge rc_pvif.PCLK);
+              rc_drive_os(tag_ts1(rc_TS1, .link_num(rc_link_num), .disable_link(1'b1)));
+           end
+           @(posedge rc_pvif.PCLK);
+           rc_tx_bcast_valid(0);
+
+           // EIOS count: 2 at 5.0 GT/s (Gen2), else 1.
+           eios_beats = (rc_active_gen == 2) ? 2 : 1;
+           repeat(eios_beats) @(posedge rc_pvif.PCLK);
+
+           rc_pvif.TxElecIdle <= cfg.active_lane_mask;
+        end
+
+        begin
+           forever begin
+              @(posedge rc_pvif.PCLK);
+              for(int lane = 0; lane < cfg.num_lanes; lane++)
+                 if(cfg.active_lane_mask[lane] && rc_pvif.RxElecIdle[lane] == 1'b1) begin
+                    rx_eios_seen = 1;
+                    disable fork;
+                 end
+           end
+        end
+     join
+
+     rc_os_lane_delete();
+
+     `uvm_info("TX_LTSSM",
+        $sformatf("DISABLED: EIOS transmitted, EIOS received=%0b -> LinkUp=0, Lanes Disabled",rx_eios_seen),
+        UVM_LOW)
+
+  endtask
+
+  // ---- EP_MODE ----
+  task ep_state_disabled();
+
+     int unsigned eios_beats;
+     bit          rx_eios_seen;
+
+     `uvm_info("RX_LTSSM","Entered DISABLED - broadcasting TS1 with Disable Link asserted",UVM_LOW)
+
+     ep_os_lane_delete();
+     rx_eios_seen = 0;
+
+     fork
+        begin
+           repeat(cfg.disabled_ts1_count) begin
+              @(posedge ep_pvif.PCLK);
+              ep_drive_os(tag_ts1(ep_TS1, .link_num(ep_link_num), .disable_link(1'b1)));
+           end
+           @(posedge ep_pvif.PCLK);
+           ep_tx_bcast_valid(0);
+
+           // EIOS count: 2 at 5.0 GT/s (Gen2), else 1.
+           eios_beats = (ep_active_gen == 2) ? 2 : 1;
+           repeat(eios_beats) @(posedge ep_pvif.PCLK);
+
+           ep_pvif.TxElecIdle <= cfg.active_lane_mask;
+        end
+
+        begin
+           forever begin
+              @(posedge ep_pvif.PCLK);
+              for(int lane = 0; lane < cfg.num_lanes; lane++)
+                 if(cfg.active_lane_mask[lane] && ep_pvif.RxElecIdle[lane] == 1'b1) begin
+                    rx_eios_seen = 1;
+                    disable fork;
+                 end
+           end
+        end
+     join
+
+     ep_os_lane_delete();
+
+     `uvm_info("RX_LTSSM",
+        $sformatf("DISABLED: EIOS transmitted, EIOS received=%0b -> LinkUp=0, Lanes Disabled",rx_eios_seen),
+        UVM_LOW)
+
+  endtask
+
+  // ---- RC_MODE (master) ----
+  task rc_state_loopback_entry();
+
+     bit ready;
+     bit timeout_occured;
+
+     `uvm_info("TX_LTSSM","Entered LOOPBACK_ENTRY (master) - broadcasting TS1 with Loopback asserted",UVM_LOW)
+
+     rc_os_lane_delete();
+     ready           = 0;
+     timeout_occured = 0;
+
+     fork
+        begin
+           repeat(cfg.loopback_entry_ts1_count) begin
+              @(posedge rc_pvif.PCLK);
+              rc_drive_os(tag_ts1(rc_TS1, .link_num(rc_link_num), .loopback(1'b1)));
+           end
+           @(posedge rc_pvif.PCLK);
+           rc_tx_bcast_valid(0);
+        end
+
+        begin
+           wait(rc_os_all_lanes_ready(2));   // approximates "two consecutive TS1
+                                              // w/ Loopback asserted" received
+           ready = 1;
+           disable fork;
+        end
+
+        begin
+           rc_ltssm_timer(cfg.loopback_entry_timeout);
+           timeout_occured = 1;
+           disable fork;
+        end
+     join
+
+     rc_os_lane_delete();
+
+     if(ready) begin
+        `uvm_info("TX_LTSSM","LOOPBACK_ENTRY: slave TS1s w/ Loopback seen -> LOOPBACK_ACTIVE",UVM_LOW)
+        rc_state = LOOPBACK_ACTIVE;
+        return;
+     end
+
+     `uvm_info("TX_LTSSM","LOOPBACK_ENTRY: timeout (<100ms bound) -> LOOPBACK_EXIT",UVM_LOW)
+     rc_state = LOOPBACK_EXIT;
+
+  endtask
+
+  task rc_state_loopback_active();
+
+     bit directed;
+     bit timeout_occured;
+
+     `uvm_info("TX_LTSSM","Entered LOOPBACK_ACTIVE (master) - waiting for directed exit",UVM_LOW)
+
+     directed        = 0;
+     timeout_occured = 0;
+
+     fork
+        begin
+           wait(cfg.loopback_exit_directed);
+           directed = 1;
+           disable fork;
+        end
+
+        begin
+           rc_ltssm_timer(cfg.loopback_active_timeout);
+           timeout_occured = 1;
+           disable fork;
+        end
+     join
+
+     `uvm_info("TX_LTSSM",
+        $sformatf("LOOPBACK_ACTIVE: directed=%0b timeout=%0b -> LOOPBACK_EXIT",directed,timeout_occured),
+        UVM_LOW)
+     rc_state = LOOPBACK_EXIT;
+
+  endtask
+
+  task rc_state_loopback_exit();
+
+     int unsigned eios_beats;
+
+     `uvm_info("TX_LTSSM","Entered LOOPBACK_EXIT (master) - EIOS burst then Electrical Idle",UVM_LOW)
+
+     rc_os_lane_delete();
+
+     // spec: 1 EIOS for 2.5-GT/s-only Ports, else 8 consecutive EIOSs.
+     eios_beats = (rc_active_gen == 1) ? 1 : 8;
+     repeat(eios_beats) @(posedge rc_pvif.PCLK);
+
+     rc_tx_bcast_valid(0);
+     rc_pvif.TxElecIdle <= cfg.active_lane_mask;
+
+     rc_ltssm_timer(cfg.loopback_exit_idle_time);
+
+     `uvm_info("TX_LTSSM","LOOPBACK_EXIT: 2ms Electrical Idle complete -> LinkUp=0, exiting Loopback",UVM_LOW)
+
+  endtask
+
+  // ---- EP_MODE (slave) ----
+  task ep_state_loopback_entry();
+
+     bit ready;
+     bit timeout_occured;
+
+     `uvm_info("RX_LTSSM","Entered LOOPBACK_ENTRY (slave) - broadcasting PAD/PAD TS1",UVM_LOW)
+
+     ep_os_lane_delete();
+     ready           = 0;
+     timeout_occured = 0;
+
+     fork
+        begin
+           repeat(cfg.loopback_entry_ts1_count) begin
+              @(posedge ep_pvif.PCLK);
+              ep_drive_os(tag_ts1(ep_TS1, .loopback(1'b1)));   // Link/Lane = PAD
+           end
+           @(posedge ep_pvif.PCLK);
+           ep_tx_bcast_valid(0);
+        end
+
+        begin
+           wait(ep_os_all_lanes_ready(2));   // approximates Symbol lock / 2 consecutive
+                                              // TS1 received on all active Lanes
+           ready = 1;
+           disable fork;
+        end
+
+        begin
+           ep_ltssm_timer(cfg.loopback_entry_timeout);
+           timeout_occured = 1;
+           disable fork;
+        end
+     join
+
+     ep_os_lane_delete();
+
+     if(ready) begin
+        `uvm_info("RX_LTSSM","LOOPBACK_ENTRY: Symbol lock (approx) -> LOOPBACK_ACTIVE",UVM_LOW)
+        ep_state = EP_LOOPBACK_ACTIVE;
+        return;
+     end
+
+     `uvm_info("RX_LTSSM","LOOPBACK_ENTRY: timeout -> LOOPBACK_EXIT",UVM_LOW)
+     ep_state = EP_LOOPBACK_EXIT;
+
+  endtask
+
+  task ep_state_loopback_active();
+
+     bit directed;
+     bit eios_seen;
+     bit timeout_occured;
+
+     `uvm_info("RX_LTSSM","Entered LOOPBACK_ACTIVE (slave) - watching for directed exit or EIOS",UVM_LOW)
+
+     directed        = 0;
+     eios_seen       = 0;
+     timeout_occured = 0;
+
+     fork
+        begin
+           forever begin
+              @(posedge ep_pvif.PCLK);
+              for(int lane = 0; lane < cfg.num_lanes; lane++)
+                 if(cfg.active_lane_mask[lane] && ep_pvif.RxElecIdle[lane] == 1'b1) begin
+                    eios_seen = 1;
+                    disable fork;
+                 end
+           end
+        end
+
+        begin
+           wait(cfg.loopback_exit_directed);
+           directed = 1;
+           disable fork;
+        end
+
+        begin
+           ep_ltssm_timer(cfg.loopback_active_timeout);
+           timeout_occured = 1;
+           disable fork;
+        end
+     join
+
+     `uvm_info("RX_LTSSM",
+        $sformatf("LOOPBACK_ACTIVE: directed=%0b eios_seen=%0b timeout=%0b -> LOOPBACK_EXIT",
+                    directed,eios_seen,timeout_occured),
+        UVM_LOW)
+     ep_state = EP_LOOPBACK_EXIT;
+
+  endtask
+
+  task ep_state_loopback_exit();
+
+     `uvm_info("RX_LTSSM","Entered LOOPBACK_EXIT (slave) - Electrical Idle",UVM_LOW)
+
+     ep_os_lane_delete();
+     ep_tx_bcast_valid(0);
+     ep_pvif.TxElecIdle <= cfg.active_lane_mask;
+
+     ep_ltssm_timer(cfg.loopback_exit_idle_time);
+
+     `uvm_info("RX_LTSSM","LOOPBACK_EXIT: 2ms Electrical Idle complete -> LinkUp=0, exiting Loopback",UVM_LOW)
+
+  endtask
+
+
+
+
+
+
+
+
+
+  task rc_state_hot_reset(output bit remain);
+     bit echo_seen;
+     bit timeout_occured;
+
+     `uvm_info("TX_LTSSM","Entered HOT_RESET (directed) - broadcasting TS1 with Hot Reset asserted",UVM_LOW)
+
+     rc_os_lane_delete();
+     echo_seen       = 0;
+     timeout_occured = 0;
+
+     fork
+        begin
+           repeat(cfg.hot_reset_ts1_count) begin
+              @(posedge rc_pvif.PCLK);
+              rc_drive_os(tag_ts1(rc_TS1, .link_num(rc_link_num), .lane_num(rc_lane_num), .hot_reset(1'b1)));
+           end
+           @(posedge rc_pvif.PCLK);
+           rc_tx_bcast_valid(0);
+        end
+
+        begin
+           wait(rc_os_all_lanes_ready(2));   // approximates "two consecutive TS1
+                                              // w/ Hot Reset asserted, matching
+                                              // Link/Lane" received
+           echo_seen = 1;
+           disable fork;
+        end
+
+        begin
+           rc_ltssm_timer(cfg.hot_reset_timeout);
+           timeout_occured = 1;
+           disable fork;
+        end
+     join
+
+     rc_os_lane_delete();
+
+     if(echo_seen && cfg.hot_reset_remain_directed) begin
+        `uvm_info("TX_LTSSM","HOT_RESET: echo seen, higher Layer still directing -> remaining in HOT_RESET",UVM_LOW)
+        remain = 1;
+        return;
+     end
+
+     `uvm_info("TX_LTSSM",
+        $sformatf("HOT_RESET: echo_seen=%0b timeout=%0b -> LinkUp=0, exiting Hot Reset",echo_seen,timeout_occured),
+        UVM_LOW)
+     remain = 0;
+
+  endtask
+
+  // ---- EP_MODE (not directed) ----
+  task ep_state_hot_reset(output bit remain);
+
+     bit echo_seen;
+     bit timeout_occured;
+
+     `uvm_info("RX_LTSSM","Entered HOT_RESET (not directed) - broadcasting TS1 with Hot Reset asserted",UVM_LOW)
+
+     ep_os_lane_delete();
+     echo_seen       = 0;
+     timeout_occured = 0;
+
+     fork
+        begin
+           repeat(cfg.hot_reset_ts1_count) begin
+              @(posedge ep_pvif.PCLK);
+              ep_drive_os(tag_ts1(ep_TS1, .link_num(ep_link_num), .lane_num(ep_lane_num), .hot_reset(1'b1)));
+           end
+           @(posedge ep_pvif.PCLK);
+           ep_tx_bcast_valid(0);
+        end
+
+        begin
+           wait(ep_os_all_lanes_ready(2));   // approximates "two consecutive TS1
+                                              // w/ Hot Reset asserted, matching
+                                              // Link/Lane" continuing to be received
+           echo_seen = 1;
+           disable fork;
+        end
+
+        begin
+           ep_ltssm_timer(cfg.hot_reset_timeout);
+           timeout_occured = 1;
+           disable fork;
+        end
+     join
+
+     ep_os_lane_delete();
+
+     // Not-directed role: continuation depends solely on TS1s with
+     // Hot Reset still being received (no separate higher-Layer gate).
+     if(echo_seen) begin
+        `uvm_info("RX_LTSSM","HOT_RESET: matching TS1s still arriving -> remaining in HOT_RESET, timer reset",UVM_LOW)
+        remain = 1;
+        return;
+     end
+
+     `uvm_info("RX_LTSSM",
+        $sformatf("HOT_RESET: timeout=%0b -> LinkUp=0, exiting Hot Reset",timeout_occured),
+        UVM_LOW)
+     remain = 0;
+
+  endtask
 
   task run_phase(uvm_phase phase);
     super.run_phase(phase);
@@ -2360,6 +4169,27 @@ endtask
             RECOVERY_RCVRCFG      : rc_state_recovery_rcvrcfg();
             RECOVERY_SPEED        : rc_state_recovery_speed();
             RECOVERY_IDLE         : rc_state_recovery_idle();
+	    DISABLED              : begin
+                                        rc_state_disabled();
+                                        `uvm_info("TX_LTSSM","DISABLED complete - ending testcase",UVM_LOW)
+                                        return;
+                                     end
+            LOOPBACK_ENTRY        : rc_state_loopback_entry();
+            LOOPBACK_ACTIVE       : rc_state_loopback_active();
+            LOOPBACK_EXIT         : begin
+                                        rc_state_loopback_exit();
+                                        `uvm_info("TX_LTSSM","LOOPBACK_EXIT complete - ending testcase",UVM_LOW)
+                                        return;
+                                     end
+            HOT_RESET             : begin
+                                        bit remain;
+                                        rc_state_hot_reset(remain);
+                                        if(!remain) begin
+                                           `uvm_info("TX_LTSSM","HOT_RESET complete - ending testcase",UVM_LOW)
+                                           return;
+                                        end
+                                     end
+
           endcase
         end
       end
@@ -2384,6 +4214,27 @@ endtask
             EP_RECOVERY_RCVRCFG      : ep_state_recovery_rcvrcfg();
             EP_RECOVERY_SPEED        : ep_state_recovery_speed();
             EP_RECOVERY_IDLE         : ep_state_recovery_idle();
+            EP_DISABLED              : begin
+                                           ep_state_disabled();
+                                           `uvm_info("RX_LTSSM","DISABLED complete - ending testcase",UVM_LOW)
+                                           return;
+                                        end
+            EP_LOOPBACK_ENTRY        : ep_state_loopback_entry();
+            EP_LOOPBACK_ACTIVE       : ep_state_loopback_active();
+            EP_LOOPBACK_EXIT         : begin
+                                           ep_state_loopback_exit();
+                                           `uvm_info("RX_LTSSM","LOOPBACK_EXIT complete - ending testcase",UVM_LOW)
+                                           return;
+                                        end
+            EP_HOT_RESET             : begin
+                                           bit remain;
+                                           ep_state_hot_reset(remain);
+                                           if(!remain) begin
+                                              `uvm_info("RX_LTSSM","HOT_RESET complete - ending testcase",UVM_LOW)
+                                              return;
+                                           end
+                                        end
+
           endcase
         end
       end
@@ -2395,4 +4246,3 @@ endtask
   endtask
 
 endclass
-

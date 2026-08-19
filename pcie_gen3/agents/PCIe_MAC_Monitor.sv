@@ -16,8 +16,12 @@ class PCIe_MAC_monitor extends uvm_monitor;
   uvm_analysis_port #(Sequence_item) mac_rx_dll_port;
   uvm_analysis_port #(Sequence_item) mac_rx_rx_port;
 
- // uvm_analysis_port #(Sequence_item) mac_sb_rc_port;
- // uvm_analysis_port #(Sequence_item) mac_sb_ep_port;
+  // 4 separate scoreboard ports, one per task
+  uvm_analysis_port #(Sequence_item) mac_sb_rc_tx_port;   // rc_collect_pipe_tx_data
+  uvm_analysis_port #(Sequence_item) mac_sb_rc_rx_port;   // rc_collect_pipe_rx_data
+  uvm_analysis_port #(Sequence_item) mac_sb_ep_tx_port;   // ep_collect_pipe_tx_data
+  uvm_analysis_port #(Sequence_item) mac_sb_ep_rx_port;   // ep_collect_pipe_rx_data
+
 
   bit [31:0]  rc_r_data[$];
   bit [31:0]  rc_mac_data[$];
@@ -51,6 +55,116 @@ class PCIe_MAC_monitor extends uvm_monitor;
   bit [127:0] ep_os_data;
 
   bit [22:0] polynomial = 23'h1DBFBC;
+ 
+  localparam bit [22:0] RC_LANE_SEED[8] = '{
+      23'h1DBFBC,  // Lane 0 mod 8
+      23'h0607BB,  // Lane 1 mod 8
+      23'h1EC760,  // Lane 2 mod 8
+      23'h18C0DB,  // Lane 3 mod 8
+      23'h010F12,  // Lane 4 mod 8
+      23'h19CFC9,  // Lane 5 mod 8
+      23'h0277CE,  // Lane 6 mod 8
+      23'h1BB807    // Lane 7 mod 8
+  };
+
+  // Forces every RC lane's LFSR back to its RC_LANE_SEED[lane%8] reset value.
+  // (Drives the reset path inside rc_lane_descramble_byte() below, since
+  // the LFSR itself lives in that function's static storage.)
+  function void rc_lane_scr_reset();
+      bit [7:0] dummy;
+      for (int lane = 0; lane < `PCIE_NUM_LANES; lane++)
+          dummy = rc_lane_descramble_byte(lane, dummy, 1'b1);
+  endfunction
+
+  // Descrambles a single byte on the given lane, advancing that
+  // lane's LFSR by 8 bits. lfsr[] is a function-local static array
+  // (same static-storage pattern as rc_d_s()'s lfsr in the driver),
+  // sized by `PCIE_NUM_LANES` and lazily seeded from
+  // RC_LANE_SEED[lane%8] on first call (an assignment-pattern literal
+  // can't be used here since its element count would have to be
+  // hardcoded independently of the `PCIE_NUM_LANES macro). Free-runs
+  // from there; pass rst=1 (see rc_lane_scr_reset()) to force that
+  // lane back to its seed without descrambling a byte.
+  function bit [7:0] rc_lane_descramble_byte(input int lane, inout bit [7:0] data, input bit rst = 1'b0);
+      static bit [22:0] lfsr[`PCIE_NUM_LANES];
+      static bit        seeded = 1'b0;
+      if (!seeded) begin
+          for (int l = 0; l < `PCIE_NUM_LANES; l++)
+              lfsr[l] = RC_LANE_SEED[l % 8];
+          seeded = 1'b1;
+      end
+      if (rst) begin
+          lfsr[lane] = RC_LANE_SEED[lane % 8];
+          return data;
+      end
+      for (int i = 0; i < 8; i++) begin
+          if (lfsr[lane][22]) lfsr[lane] = (lfsr[lane] << 1) ^ polynomial;
+          else                lfsr[lane] = (lfsr[lane] << 1);
+          data[i] = lfsr[lane][22] ^ data[i];
+      end
+      return data;
+  endfunction
+
+  localparam bit [22:0] EP_LANE_SEED[8] = '{
+      23'h1DBFBC,  // Lane 0 mod 8
+      23'h0607BB,  // Lane 1 mod 8
+      23'h1EC760,  // Lane 2 mod 8
+      23'h18C0DB,  // Lane 3 mod 8
+      23'h010F12,  // Lane 4 mod 8
+      23'h19CFC9,  // Lane 5 mod 8
+      23'h0277CE,  // Lane 6 mod 8
+      23'h1BB807    // Lane 7 mod 8
+  };
+
+  // Forces every EP lane's LFSR back to its EP_LANE_SEED[lane%8] reset value.
+  // (Drives the reset path inside ep_lane_descramble_byte() below, since
+  // the LFSR itself lives in that function's static storage.)
+  function void ep_lane_scr_reset();
+      bit [7:0] dummy;
+      for (int lane = 0; lane < `PCIE_NUM_LANES; lane++)
+          dummy = ep_lane_descramble_byte(lane, dummy, 1'b1);
+  endfunction
+
+  // Descrambles a single byte on the given lane, advancing that
+  // lane's LFSR by 8 bits. lfsr[] is a function-local static array
+  // (same static-storage pattern as ep_d_s()'s lfsr in the driver),
+  // sized by `PCIE_NUM_LANES` and lazily seeded from
+  // EP_LANE_SEED[lane%8] on first call (an assignment-pattern literal
+  // can't be used here since its element count would have to be
+  // hardcoded independently of the `PCIE_NUM_LANES macro). Free-runs
+  // from there; pass rst=1 (see ep_lane_scr_reset()) to force that
+  // lane back to its seed without descrambling a byte.
+  function bit [7:0] ep_lane_descramble_byte(input int lane, inout bit [7:0] data, input bit rst = 1'b0);
+      static bit [22:0] lfsr[`PCIE_NUM_LANES];
+      static bit        seeded = 1'b0;
+      if (!seeded) begin
+          for (int l = 0; l < `PCIE_NUM_LANES; l++)
+              lfsr[l] = EP_LANE_SEED[l % 8];
+          seeded = 1'b1;
+      end
+      if (rst) begin
+          lfsr[lane] = EP_LANE_SEED[lane % 8];
+          return data;
+      end
+      for (int i = 0; i < 8; i++) begin
+          if (lfsr[lane][22]) lfsr[lane] = (lfsr[lane] << 1) ^ polynomial;
+          else                lfsr[lane] = (lfsr[lane] << 1);
+          data[i] = lfsr[lane][22] ^ data[i];
+      end
+      return data;
+  endfunction
+
+
+  bit [129:0] rc_pipe_tx_data_q[$];    // added
+  bit [129:0] rc_pipe_rx_data_q[$];    // added
+  bit [129:0] ep_pipe_tx_data_q[$];    // added
+  bit [129:0] ep_pipe_rx_data_q[$];    // added
+
+int rc_tx_trans_cnt;
+int rc_rx_trans_cnt;
+int ep_tx_trans_cnt;
+int ep_rx_trans_cnt;
+
 
   function new(string name, uvm_component parent);
     super.new(name, parent);
@@ -69,6 +183,10 @@ class PCIe_MAC_monitor extends uvm_monitor;
     mac_tx_rx_port  = new("mac_tx_rx_port",  this);
     mac_rx_dll_port = new("mac_rx_dll_port", this);
     mac_rx_rx_port  = new("mac_rx_rx_port",  this);
+    mac_sb_rc_tx_port = new("mac_sb_rc_tx_port", this);
+    mac_sb_rc_rx_port = new("mac_sb_rc_rx_port", this);
+    mac_sb_ep_tx_port = new("mac_sb_ep_tx_port", this);
+    mac_sb_ep_rx_port = new("mac_sb_ep_rx_port", this);
 
     case(cfg.mode)
 
@@ -148,6 +266,134 @@ class PCIe_MAC_monitor extends uvm_monitor;
     end
   endfunction
 
+  task automatic rc_collect_pipe_tx_data();
+  Sequence_item rc_pipe_tx_item;
+  forever begin
+    rc_pipe_tx_item = Sequence_item::type_id::create("rc_pipe_tx_item", this);
+
+    @(posedge rc_pvif.TxDataValid);
+    while (1) begin
+      @(negedge rc_pvif.PCLK);
+      if (!rc_pvif.TxDataValid) break;
+      rc_pipe_tx_data_q.push_back(rc_pvif.TxData);
+    end
+
+    // packet complete -> populate item once, write once
+    rc_pipe_tx_item.pma_rc_tx_q = rc_pipe_tx_data_q;
+    rc_tx_trans_cnt++;
+    mac_sb_rc_tx_port.write(rc_pipe_tx_item);
+
+    `uvm_info("RC_MAC_TX_MON1",
+          $sformatf("rc_pipe_tx_item written to mac_sb_rc_tx_port successfully. pma_rc_tx_q=%p, size=%0d, time=%0t",
+                    rc_pipe_tx_item.pma_rc_tx_q,
+                    rc_pipe_tx_item.pma_rc_tx_q.size(),
+                    $time),
+          UVM_LOW)
+
+    `uvm_info("RC_MAC_TX_MON",
+              $sformatf("[%s] PIPE TxData CAPTURED %p size=%0d time=%t",
+                        tag, rc_pipe_tx_data_q, rc_pipe_tx_data_q.size(), $time), UVM_LOW)
+    rc_pipe_tx_data_q.delete();
+  end
+endtask
+
+task automatic rc_collect_pipe_rx_data();
+  Sequence_item rc_pipe_rx_item;
+  forever begin
+    rc_pipe_rx_item = Sequence_item::type_id::create("rc_pipe_rx_item", this);
+
+    @(posedge rc_pvif.RxValid);
+    while (1) begin
+      @(negedge rc_pvif.PCLK);
+      if (!rc_pvif.RxValid) break;
+      rc_pipe_rx_data_q.push_back(rc_pvif.RxData);
+    end
+
+    rc_pipe_rx_item.pma_rc_rx_q = rc_pipe_rx_data_q;
+    rc_rx_trans_cnt++;
+    mac_sb_rc_rx_port.write(rc_pipe_rx_item);
+
+    `uvm_info("RC_MAC_RX_MON1",
+          $sformatf("[%s] rc_pipe_rx_item written to mac_sb_rc_rx_port successfully. RxData=%p, queue_size=%0d, time=%0t",
+                    tag,
+                    rc_pipe_rx_item.pma_rc_rx_q,
+                    rc_pipe_rx_item.pma_rc_rx_q.size(),
+                    $time),
+          UVM_LOW)
+
+    `uvm_info("RC_MAC_RX_MON",
+              $sformatf("[%s] PIPE RxData CAPTURED %p queue_size=%0d time=%t",
+                        tag, rc_pipe_rx_data_q, rc_pipe_rx_data_q.size(), $time), UVM_LOW)
+    rc_pipe_rx_data_q.delete();
+  end
+endtask
+
+task automatic ep_collect_pipe_tx_data();
+  Sequence_item ep_pipe_tx_item;
+  forever begin
+    ep_pipe_tx_item = Sequence_item::type_id::create("ep_pipe_tx_item", this);
+
+    @(posedge ep_pvif.TxDataValid);
+    while (1) begin
+      @(negedge ep_pvif.PCLK);
+      if (!ep_pvif.TxDataValid) break;
+      ep_pipe_tx_data_q.push_back(ep_pvif.TxData);
+    end
+
+    ep_pipe_tx_item.pma_ep_tx_q = ep_pipe_tx_data_q;
+    ep_tx_trans_cnt++;
+    mac_sb_ep_tx_port.write(ep_pipe_tx_item);
+
+   `uvm_info("EP_MAC_TX_MON1",
+          $sformatf("[%s] ep_pipe_tx_item written to mac_sb_ep_tx_port successfully. TxData=%p, size=%0d, time=%0t",
+                    tag,
+                    ep_pipe_tx_item.pma_ep_tx_q,
+                    ep_pipe_tx_item.pma_ep_tx_q.size(),
+                    $time),
+          UVM_LOW)
+
+    `uvm_info("EP_MAC_TX_MON",
+              $sformatf("[%s] PIPE TxData CAPTURED %p size=%0d time=%t",
+                        tag, ep_pipe_tx_data_q, ep_pipe_tx_data_q.size(), $time), UVM_LOW)
+    ep_pipe_tx_data_q.delete();
+  end
+endtask
+task automatic ep_collect_pipe_rx_data();
+  Sequence_item ep_pipe_rx_item;
+  forever begin
+    ep_pipe_rx_item = Sequence_item::type_id::create("ep_pipe_rx_item", this);
+
+    @(posedge ep_pvif.RxValid);
+    while (1) begin
+      @(negedge ep_pvif.PCLK);
+      if (!ep_pvif.RxValid) break;
+      ep_pipe_rx_data_q.push_back(ep_pvif.RxData);
+    end
+
+    ep_pipe_rx_item.pma_ep_rx_q = ep_pipe_rx_data_q;
+    ep_rx_trans_cnt++;
+    mac_sb_ep_rx_port.write(ep_pipe_rx_item);
+
+    `uvm_info("EP_MAC_RX_MON1",
+          $sformatf("[%s] ep_pipe_rx_item written to mac_sb_ep_rx_port successfully. RxData=%p, queue_size=%0d, time=%0t",
+                    tag,
+                    ep_pipe_rx_item.pma_ep_rx_q,
+                    ep_pipe_rx_item.pma_ep_rx_q.size(),
+                    $time),
+          UVM_LOW)
+
+    `uvm_info("EP_MAC_RX_MON",
+              $sformatf("[%s] PIPE RxData CAPTURED %p queue_size=%0d time=%t",
+                        tag, ep_pipe_rx_data_q, ep_pipe_rx_data_q.size(), $time), UVM_LOW)
+    ep_pipe_rx_data_q.delete();
+  end
+endtask
+
+
+
+
+
+
  //BYTE UNSTRIPING
 function void rc_byte_unstriping();
     bit [7:0]   payload_bytes[$];
@@ -165,7 +411,9 @@ function void rc_byte_unstriping();
 
     for (int r = 0; r < 16; r++) begin
       for (int lane = 0; lane < cfg.num_lanes; lane++) begin
-        payload_bytes.push_back(rc_pvif.RxData[lane][127-r*8 -: 8]);   // FIX: ep_pvif, not rc_pvif
+        bit [7:0] rc_raw_byte;
+        rc_raw_byte = rc_pvif.RxData[lane][127-r*8 -: 8];   // FIX: ep_pvif, not rc_pvif
+        payload_bytes.push_back(rc_lane_descramble_byte(lane, rc_raw_byte));
       end
     end
 
@@ -217,7 +465,9 @@ function void ep_byte_unstriping();
 
     for (int r = 0; r < 16; r++) begin
       for (int lane = 0; lane < cfg.num_lanes; lane++) begin
-        payload_bytes.push_back(ep_pvif.RxData[lane][127-r*8 -: 8]);   // FIX: ep_pvif, not rc_pvif
+       bit [7:0] ep_raw_byte;
+        ep_raw_byte = ep_pvif.RxData[lane][127-r*8 -: 8];   // FIX: ep_pvif, not rc_pvif
+        payload_bytes.push_back(ep_lane_descramble_byte(lane, ep_raw_byte));
       end
     end
 
@@ -250,6 +500,20 @@ function void ep_byte_unstriping();
       $sformatf("[%s] EP byte-unstriping complete: %0d DWs reassembled", tag, ep_r_data.size()),
       UVM_LOW)
 endfunction
+ function automatic bit rc_any_lane_valid();
+     rc_any_lane_valid = 1'b0;
+     for (int lane = 0; lane < cfg.num_lanes; lane++)
+        if (rc_pvif.RxValid[lane])
+           rc_any_lane_valid = 1'b1;
+  endfunction
+
+  function automatic bit ep_any_lane_valid();
+     ep_any_lane_valid = 1'b0;
+     for (int lane = 0; lane < cfg.num_lanes; lane++)
+        if (ep_pvif.RxValid[lane])
+           ep_any_lane_valid = 1'b1;
+  endfunction
+
 
 
   virtual task run_phase(uvm_phase phase);
@@ -328,44 +592,59 @@ endfunction
 
     @(negedge rc_pvif.PCLK)
 
-    if(!rc_pvif.RxValid[0])
+    if(!rc_any_lane_valid())
       break;
 
-    if(rc_pvif.RxData[0][129:128] == 2'b10) begin
+    // Single pass over all active lanes: each lane is checked on its OWN
+    // RxValid[lane] and its OWN sync header, so a lane that's idle/invalid
+    // this cycle is simply skipped instead of pulling in stale/wrong data.
+    // OS entries are captured right here per lane (they're independent per
+    // lane). DATA is only flagged here (rc_data_seen) -- the actual DW
+    // extraction still happens once below, since reconstructing a DATA
+    // cycle (broadcast read or byte-unstriping) is inherently a cross-lane
+    // operation and can't be done independently lane-by-lane like OS can.
+    begin
+      bit rc_data_seen;
+      rc_data_seen = 1'b0;
 
-       if (cfg.num_lanes > 1 && (rc_pvif.RxData[1][127:0] !== rc_pvif.RxData[0][127:0])) begin
+      for (int lane = 0; lane < cfg.num_lanes; lane++) begin
+        if (rc_pvif.RxValid[lane]) begin
+          if (rc_pvif.RxData[lane][129:128] == 2'b10) begin
+            rc_data_seen = 1'b1;
+                `uvm_info("MAC_TX", $sformatf("DLLP_START %h",rc_pvif.RxData[lane]),UVM_LOW)
+          end
+          else if (rc_pvif.RxData[lane][129:128] == 2'b01) begin
+            case(rc_pvif.RxData[lane][127:120])
+              8'h1E : begin
+                rc_os_data = rc_pvif.RxData[lane][127:0];
+                //void'(os_s(rc_os_data));
+                rc_item.os_t_lane[lane].push_back(rc_os_data);
+                `uvm_info("MAC_TX", $sformatf("Packet Sent lane%0d %h",lane,rc_os_data),UVM_LOW)
+              end
+              8'h2D : begin
+                rc_os_data = rc_pvif.RxData[lane][127:0];
+                //void'(os_s(rc_os_data));
+                rc_item.os_t_lane[lane].push_back(rc_os_data);
+                `uvm_info("MAC_TX", $sformatf("Packet Sent lane%0d %h",lane,rc_os_data),UVM_LOW)
+              end
+              8'h00 : begin
+                rc_os_data = rc_pvif.RxData[lane][127:0];
+                rc_item.os_t_lane[lane].push_back(rc_os_data);
+                `uvm_info("MAC_TX", $sformatf("Packet Sent lane%0d %h",lane,rc_os_data),UVM_LOW)
+              end
+            endcase
+          end
+        end
+      end
+
+      if (rc_data_seen) begin
+        // rc_byte_unstriping() already generalizes to any cfg.num_lanes --
+        // with 1 lane it reassembles the same 4 DWs the old single-lane
+        // broadcast read produced, so no separate broadcast path is needed.
         rc_byte_unstriping();
       end
-      else begin
-        rc_decoded_data = rc_pvif.RxData[0][127:0];
-        for(int i = 0; i < 4; i++) begin
-          rc_r_data.push_back(rc_decoded_data[(3-i)*32 +: 32]);
-        end
-      end
     end
-    else if(rc_pvif.RxData[0][129:128] == 2'b01) begin
-      case(rc_pvif.RxData[0][127:120])
-        8'h1E : begin
-          rc_os_data = rc_pvif.RxData[0][127:0];
-          void'(os_s(rc_os_data));
-          rc_item.os_t.push_back(rc_os_data);
-          `uvm_info("MAC_TX", $sformatf("Packet Sent %h",rc_os_data),UVM_HIGH)
-        end
-        8'h2D : begin
-          rc_os_data = rc_pvif.RxData[0][127:0];
-          void'(os_s(rc_os_data));
-          rc_item.os_t.push_back(rc_os_data);
-          `uvm_info("MAC_TX", $sformatf("Packet Sent %h",rc_os_data),UVM_HIGH)
-        end
-         8'h00 : begin
-          rc_os_data = rc_pvif.RxData[0][127:0];
-          rc_item.os_t.push_back(rc_os_data);
-          `uvm_info("MAC_TX", $sformatf("Packet Sent %h",rc_os_data),UVM_HIGH)
-        end
-      endcase
-    end
-  end
-     
+  end     
     foreach(rc_r_data[i])
     `uvm_info("MAC_TX_MON", $sformatf("Packet_Sent %h",rc_r_data[i]),UVM_LOW)
 
@@ -470,6 +749,19 @@ endfunction
 	  rc_r_data.delete();
 	  rc_dlp_p_q.delete();
     end
+    else begin
+      // Neither an STP (4'hF) header nor a DLLP (F0AC) header -- if left
+      // unhandled, rc_r_data.size() never shrinks and this while loop spins
+      // at zero delay forever, livelocking the simulator (this is what was
+      // hanging the DL state machine). Drop the unrecognized dword and move
+      // on instead of stalling.
+      bit [31:0] rc_unmatched;
+      rc_unmatched = rc_r_data.pop_front();
+      `uvm_warning("MAC_TX_MON",
+        $sformatf("[%s] Unrecognized leading dword %h in rc_r_data (not STP/DLLP) - dropped to avoid parser livelock",
+          tag, rc_unmatched))
+    end
+
 
     end
    // else begin
@@ -480,11 +772,15 @@ endfunction
               tag, rc_item.tlp_queue.size(), rc_item.dlp_queue.size()), UVM_LOW)
           mac_tx_rx_port.write(rc_item);
          // mac_rc_sb_port.write(rc_item); 
-           rc_item.os_t.delete();
+        for (int lane = 0; lane < cfg.num_lanes; lane++)
+              rc_item.os_t_lane[lane].delete();
       // end
    end
 
   end
+ rc_collect_pipe_tx_data();
+ rc_collect_pipe_rx_data();
+
    join_none
 //end
       end
@@ -561,49 +857,61 @@ endfunction
 
   ep_item = Sequence_item::type_id::create("ep_item");
 
-  @(posedge ep_pvif.RxValid[0]);
-
-  while(1) begin
+    @(posedge ep_pvif.RxValid[0]);
+   while(1) begin
 
     @(negedge ep_pvif.PCLK)
 
-    if(!ep_pvif.RxValid[0])
+    if(!ep_any_lane_valid())
       break;
 
-    if(ep_pvif.RxData[0][129:128] == 2'b10) begin
+    // Single pass over all active lanes: each lane is checked on its OWN
+    // RxValid[lane] and its OWN sync header, so a lane that's idle/invalid
+    // this cycle is simply skipped. OS entries are captured right here per
+    // lane. DATA is only flagged here (ep_data_seen) -- the actual DW
+    // extraction still happens once below, since reconstructing a DATA
+    // cycle (broadcast read or byte-unstriping) is inherently a cross-lane
+    // operation and can't be done independently lane-by-lane like OS can.
+    begin
+      bit ep_data_seen;
+      ep_data_seen = 1'b0;
 
-       // DATA cycle -- same broadcast-vs-striped detection as RC side.
-      if (cfg.num_lanes > 1 && (ep_pvif.RxData[1][127:0] !== ep_pvif.RxData[0][127:0])) begin
+      for (int lane = 0; lane < cfg.num_lanes; lane++) begin
+        if (ep_pvif.RxValid[lane]) begin
+          if (ep_pvif.RxData[lane][129:128] == 2'b10) begin
+            ep_data_seen = 1'b1;
+                `uvm_info("MAC_TX", $sformatf("DLLP_START %h",ep_pvif.RxData[lane]),UVM_LOW)
+          end
+          else if (ep_pvif.RxData[lane][129:128] == 2'b01) begin
+            case(ep_pvif.RxData[lane][127:120])
+              8'h1E : begin
+                ep_os_data = ep_pvif.RxData[lane][127:0];
+               // void'(os_s(ep_os_data));
+                ep_item.os_t_lane[lane].push_back(ep_os_data);
+                `uvm_info("MAC_RX", $sformatf("EP_ORDERSETS lane%0d %h",lane,ep_os_data),UVM_LOW)
+              end
+              8'h2D : begin
+                ep_os_data = ep_pvif.RxData[lane][127:0];
+                //void'(os_s(ep_os_data));
+                ep_item.os_t_lane[lane].push_back(ep_os_data);
+              end
+              8'h00 : begin
+                $display("data lane%0d %h",lane,ep_pvif.RxData[lane]);
+                ep_os_data = ep_pvif.RxData[lane][127:0];
+                //void'(os_s(ep_os_data));
+                ep_item.os_t_lane[lane].push_back(ep_os_data);
+              end
+            endcase
+          end
+        end
+      end
+
+      if (ep_data_seen) begin
+        // ep_byte_unstriping() already generalizes to any cfg.num_lanes --
+        // with 1 lane it reassembles the same 4 DWs the old single-lane
+        // broadcast read produced, so no separate broadcast path is needed.
         ep_byte_unstriping();
       end
-      else begin
-        ep_decoded_data = ep_pvif.RxData[0][127:0];
-        for(int i = 0; i < 4; i++) begin
-          ep_r_data.push_back(ep_decoded_data[(3-i)*32 +: 32]);
-        end
-      end
-    end
-    else if(ep_pvif.RxData[0][129:128] == 2'b01) begin
-      case(ep_pvif.RxData[0][127:120])
-        8'h1E : begin
-          ep_os_data = ep_pvif.RxData[0][127:0];
-          void'(os_s(ep_os_data));
-          ep_item.os_t.push_back(ep_os_data);
-          `uvm_info("MAC_RX", $sformatf("EP_ORDERSETS %h",ep_os_data),UVM_HIGH)
-        end
-         8'h2D : begin
-          ep_os_data = ep_pvif.RxData[0][127:0];
-          void'(os_s(ep_os_data));
-          ep_item.os_t.push_back(ep_os_data);
-         // `uvm_info("MAC_RX", $sformatf("Packet Sent %h",ep_os_data),UVM_HIGH)
-        end
-        8'h00 : begin
-          $display("data %h",ep_pvif.RxData[0]);
-          ep_os_data = ep_pvif.RxData[0][127:0];
-          //void'(os_s(ep_os_data));
-          ep_item.os_t.push_back(ep_os_data);
-        end
-      endcase
     end
   end
     foreach(ep_r_data[i]) 
@@ -706,10 +1014,22 @@ endfunction
 	  ep_r_data.delete();
 	  ep_dlp_p_q.delete();
       end
+       else begin
+      // Same livelock hazard as the RC side: neither STP nor DLLP header
+      // matched, so without this branch ep_r_data.size() never shrinks and
+      // while(ep_r_data.size() > 0) spins at zero delay forever. Drop the
+      // unrecognized dword and move on.
+      bit [31:0] ep_unmatched;
+      ep_unmatched = ep_r_data.pop_front();
+      `uvm_warning("MAC_RX_MON",
+        $sformatf("[%s] Unrecognized leading dword %h in ep_r_data (not STP/DLLP) - dropped to avoid parser livelock",
+          tag, ep_unmatched))
+    end
+
     end
    // else begin
       //  if(ep_pvif.RxValid[0] == 0) begin
-     `uvm_info("MAC_RX_MON", $sformatf("EP MAC RX ORDEREDSET CAPTURED %p  time = %t",ep_item.os_t,$time),UVM_HIGH)
+     `uvm_info("MAC_RX_MON", $sformatf("EP MAC RX ORDEREDSET CAPTURED %p  time = %t",ep_item.os_t_lane,$time),UVM_HIGH)
            `uvm_info("MAC_RX_MON",
              $sformatf("[%s] EP MAC packet forwarded to RX path: tlp_queue=%0d dlp_queue=%0d",
                tag, ep_item.tlp_queue.size(), ep_item.dlp_rx_queue.size()), UVM_LOW)
@@ -717,11 +1037,15 @@ endfunction
      `uvm_info("MAC_RX_MON", $sformatf("EP_deleted"),UVM_HIGH)
          // mac_ep_sb_port.write(ep_item); 
            
-          ep_item.os_t.delete();
+        for (int lane = 0; lane < cfg.num_lanes; lane++)
+             ep_item.os_t_lane[lane].delete();
       // end
    end
 
  end
+ ep_collect_pipe_tx_data();
+ ep_collect_pipe_rx_data();
+
    join_none
 //end
       end

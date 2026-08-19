@@ -112,14 +112,14 @@ class Single_Mem_Wr_Rd_4DW extends uvm_sequence #(Sequence_item);
 
      //tag_id = tag_mgr.allocate_tag();
 
-     `uvm_do_with(req, {e_type == MEM_WR; e_fmt == local::p_wr_fmt; addr == local::p_addr; td == 1; length == local::p_length; td == 1; tag == 0;})
+     `uvm_do_with(req, {e_type == MEM_WR; e_fmt == local::p_wr_fmt; addr == local::p_addr; td == 1; length == local::p_length; td == 1; tag == 0;tc ==0;})
 
      `uvm_info("DBG", $sformatf("e_type=%s e_fmt=%s fmt=%03b", req.e_type.name(), req.e_fmt.name(), req.fmt),UVM_LOW)
 
    
      tag_id = tag_mgr.allocate_tag();
 
-    `uvm_do_with(req, {e_type == MEM_RD; e_fmt == local::p_rd_fmt; addr == local::p_addr; td == 1; length == local::p_length; td == 1; tag == tag_id;})
+    `uvm_do_with(req, {e_type == MEM_RD; e_fmt == local::p_rd_fmt; addr == local::p_addr; td == 1; length == local::p_length; td == 1; tag == tag_id;tc == 0;})
 
     `uvm_info("DBG", $sformatf("e_type=%s e_fmt=%s fmt=%03b", req.e_type.name(), req.e_fmt.name(), req.fmt),UVM_LOW)
 
@@ -203,14 +203,14 @@ class Multiple_Mem_Wr_Rd_4DW extends uvm_sequence #(Sequence_item);
 
     //tag_id = tag_mgr.allocate_tag();
 
-    `uvm_do_with(req, {e_type == MEM_WR; e_fmt == local::p_wr_fmt; addr == local::p_addr; td == 1; length == local::p_length; td == 1; tag == 0;})
+    `uvm_do_with(req, {e_type == MEM_WR; e_fmt == local::p_wr_fmt; addr == local::p_addr; td == 1; length == local::p_length; td == 1; tag == 0;tc == 0;})
 
     `uvm_info("DBG", $sformatf("e_type=%s e_fmt=%s fmt=%03b", req.e_type.name(), req.e_fmt.name(), req.fmt),UVM_LOW)
 
 
     tag_id = tag_mgr.allocate_tag();
 
-    `uvm_do_with(req, {e_type == MEM_RD; e_fmt == local::p_rd_fmt; addr == local::p_addr; td == 1; length == local::p_length; td == 1; tag == tag_id;})
+    `uvm_do_with(req, {e_type == MEM_RD; e_fmt == local::p_rd_fmt; addr == local::p_addr; td == 1; length == local::p_length; td == 1; tag == tag_id;tc == 0;})
 
     `uvm_info("DBG", $sformatf("e_type=%s e_fmt=%s fmt=%03b", req.e_type.name(), req.e_fmt.name(), req.fmt),UVM_LOW)
 
@@ -293,7 +293,7 @@ class B2B_Mem_Wr_Rd_4DW extends uvm_sequence #(Sequence_item);
     `uvm_do_with(req, {e_type == MEM_WR; e_fmt == local::p_wr_fmt; addr == local::p_addr; td == 1; length == local::p_length; td == 1; tag == 0;})
 
     `uvm_info("DBG", $sformatf("e_type=%s e_fmt=%s fmt=%03b", req.e_type.name(), req.e_fmt.name(), req.fmt),UVM_LOW)
-
+tag_id = tag_mgr.allocate_tag();  
     `uvm_do_with(req, {e_type == MEM_RD; e_fmt == local::p_rd_fmt; addr == local::p_addr; td == 1; length == local::p_length; td == 1; tag == tag_id;})
 
     `uvm_info("DBG", $sformatf("e_type=%s e_fmt=%s fmt=%03b", req.e_type.name(), req.e_fmt.name(), req.fmt),UVM_LOW)
