@@ -323,9 +323,7 @@ Sequence_item rx_pkt;
 
   endtask
 
-    //-----------------------------------------------------------
-// Dedicated RC FC-credit monitor - decoupled from TLP capture
-//-----------------------------------------------------------
+
 //-----------------------------------------------------------
 // Dedicated RC FC-credit monitor - decoupled from TLP capture
 //-----------------------------------------------------------
@@ -352,135 +350,37 @@ endtask
 
 task rc_collect_data_TX(Sequence_item t_x);
 
-  bit [31:0] header[4];
-  bit [31:0] payload_q[1024];
-
-  bit [31:0] ecrc;
-
-  int payload_length;
-  int hdr_len;
-
-  bit [2:0] fmt;
-  bit td_bit;
-  bit has_data;
+  bit [31:0] data_dw;
+  bit        eop;
 
   ////////////////////////////////////////////////////
   // Wait For Start Of Packet
   ////////////////////////////////////////////////////
+  t_x.tx_data_t.delete();
 
-   @(negedge TX_TL_DL.CLK);
- 
-    wait(TX_TL_DL.tl_tx_valid);
-  
-        @(posedge TX_TL_DL.CLK);
+  @(negedge TX_TL_DL.CLK);
+  wait(TX_TL_DL.tl_tx_valid);
 
-  wait(TX_TL_DL.tl_tx_valid &&
-       TX_TL_DL.tl_tx_ready);
-
- 
-  header[0] = TX_TL_DL.tl_tx_data;
-
-  ////////////////////////////////////////////////////
-  // Decode Header Length
-  ////////////////////////////////////////////////////
-
-  fmt = header[0][31:29];
-
-   if((fmt == 3'b000) ||
-      (fmt == 3'b010))
-    hdr_len = 3;
-  else
-    hdr_len = 4;
-
-  ////////////////////////////////////////////////////
-  // Remaining Header DWs
-  ////////////////////////////////////////////////////
-
-  for(int i = 1; i < hdr_len; i++) begin
+  while (1) begin
 
     @(posedge TX_TL_DL.CLK);
 
-    wait(TX_TL_DL.tl_tx_valid &&
-         TX_TL_DL.tl_tx_ready);
+    if (TX_TL_DL.tl_tx_valid && TX_TL_DL.tl_tx_ready) begin
+      data_dw = TX_TL_DL.tl_tx_data;
+      t_x.tx_data_t.push_back(data_dw);
 
-    header[i] = TX_TL_DL.tl_tx_data;
-
-  end
-
-  ////////////////////////////////////////////////////
-  // Payload Info
-  ////////////////////////////////////////////////////
-
-  payload_length = header[0][9:0];
-
-   has_data = (fmt == 3'b010) ||
-   (fmt == 3'b011);
-
-  td_bit = header[0][15];
-
-  ////////////////////////////////////////////////////
-  // Payload Collection
-  ////////////////////////////////////////////////////
-
-  if(has_data) begin
-
-    for(int i = 0; i < payload_length; i++) begin
-
-      @(posedge TX_TL_DL.CLK);
-
-      wait(TX_TL_DL.tl_tx_valid &&
-           TX_TL_DL.tl_tx_ready);
-
-      payload_q[i] = TX_TL_DL.tl_tx_data;
-
+      `uvm_info("TX_COLLECT",
+        $sformatf("RC: Collected DW = %08h (queue size=%0d)",
+                   data_dw, t_x.tx_data_t.size()),
+        UVM_LOW)
     end
 
-  end
-
-  ////////////////////////////////////////////////////
-  // ECRC Collection
-  ////////////////////////////////////////////////////
-
-  if(td_bit) begin
-
-    @(posedge TX_TL_DL.CLK);
-
-    wait(TX_TL_DL.tl_tx_valid &&
-         TX_TL_DL.tl_tx_ready);
-
-    ecrc = TX_TL_DL.tl_tx_data;
+    if (!TX_TL_DL.tl_tx_valid)
+      break;
 
   end
-
-  ////////////////////////////////////////////////////
-  // Store Header Into tx_data Queue
-  ////////////////////////////////////////////////////
-
-  for(int i = 0; i < hdr_len; i++)
-    t_x.tx_data_t.push_back(header[i]);
-
-  ////////////////////////////////////////////////////
-  // Store Payload Into tx_data Queue
-  ////////////////////////////////////////////////////
-
-  if(has_data) begin
-
-    for(int i = 0; i < payload_length; i++)begin
-      t_x.tx_data_t.push_back(payload_q[i]);
-    end
-
-  end
-
-  ////////////////////////////////////////////////////
-  // Store ECRC Into tx_data Queue
-  ////////////////////////////////////////////////////
-
-  if(td_bit)
-    t_x.tx_data_t.push_back(ecrc);
-
 
 endtask
-
 task rc_collect_dllp(Sequence_item r_x);
     
     bit [31:0] header [2];
@@ -597,34 +497,20 @@ end
 endtask
 
 task rc_collect_tlp(Sequence_item r_x);
-
   bit [31:0] seq_no;
-
-  bit [31:0] header[4];
-  bit [31:0] payload_q[1024];
-
-  bit [31:0] ecrc;
+  bit [31:0] dw;
+  bit [31:0] body_q[$];   // raw DWs after seq_no: header+payload+ecrc+lcrc, undecoded
   bit [31:0] lcrc;
   bit [31:0] calc_lcrc;
-
   bit [31:0] lcrc_pkt_q[$];
-
-  int payload_length;
-  int hdr_len;
-
-  bit [2:0] fmt;
-  bit td_bit;
-  bit has_data;
-
     r_x.rx_data_t.delete();
     lcrc_pkt_q.delete();
     r_x.rc_com_data_sb.delete();
-  
+    body_q.delete();
   ////////////////////////////////////////////////////////////
   // SEQ NUM
   ////////////////////////////////////////////////////////////
  if(TX_DLL_PCS.tl_mac_packet) begin
-
   while(!(TX_DLL_PCS.dl_rx_valid &&
           TX_DLL_PCS.dl_rx_ready));
  
@@ -634,182 +520,52 @@ task rc_collect_tlp(Sequence_item r_x);
       
   lcrc_pkt_q.push_back(seq_no);
    r_x.rc_com_data_sb.push_back(seq_no);
-
   ////////////////////////////////////////////////////////////
-  // HEADER DW0
+  // COLLECT REST OF PACKET - no fmt/hdr_len/payload_length/td_bit
+  // decode. Ride the handshake DW by DW until dl_rx_valid drops;
+  // the last DW collected is the LCRC, everything before it is
+  // header+payload+ecrc combined.
   ////////////////////////////////////////////////////////////
-
-do begin
-	  
+  while (1) begin
     @(negedge TX_DLL_PCS.CLK);
-
-  end
-  while(!(TX_DLL_PCS.dl_rx_valid &&
-          TX_DLL_PCS.dl_rx_ready));
-  header[0] = TX_DLL_PCS.dl_rx_data;
-  `uvm_info("RX_PKT", $sformatf("RC: Received DATA on TX_DLL_PCS.dl_rx_data = %08h", header[0]), UVM_LOW)
-
-  lcrc_pkt_q.push_back(header[0]);
-   r_x.rc_com_data_sb.push_back(header[0]);
-
-  ////////////////////////////////////////////////////////////
-  // HEADER LENGTH
-  ////////////////////////////////////////////////////////////
-
-  fmt = header[0][31:29];
-
-  if((fmt == 3'b000) ||
-     (fmt == 3'b010))
-    hdr_len = 3;
-  else
-    hdr_len = 4;
-
-  ////////////////////////////////////////////////////////////
-  // REMAINING HEADER DWS
-  ////////////////////////////////////////////////////////////
-  for(int i = 1; i < hdr_len; i++) begin
-
- do begin
-	  
-    @(negedge TX_DLL_PCS.CLK);
-
-  end
-  while(!(TX_DLL_PCS.dl_rx_valid &&
-          TX_DLL_PCS.dl_rx_ready));
-
-    header[i] = TX_DLL_PCS.dl_rx_data;
-
-    `uvm_info("RX_PKT", $sformatf("RC: Received DATA on TX_DLL_PCS.dl_rx_data = %08h", header[i]), UVM_LOW)
-
-    lcrc_pkt_q.push_back(header[i]);
-   r_x.rc_com_data_sb.push_back(header[i]);
-
-  end
-
-  ////////////////////////////////////////////////////////////
-  // PAYLOAD INFO
-  ////////////////////////////////////////////////////////////
-
-  payload_length = header[0][9:0];
-
-    has_data = (fmt == 3'b000) ||
-    (fmt == 3'b010);
-
-  td_bit = header[0][15];
-
-  ////////////////////////////////////////////////////////////
-  // PAYLOAD
-  ////////////////////////////////////////////////////////////
-
-  if(has_data) begin
-
-    for(int i = 0; i < payload_length; i++) begin
-
-    do begin
-	  
-    @(negedge TX_DLL_PCS.CLK);
-
-  end
-  while(!(TX_DLL_PCS.dl_rx_valid &&
-          TX_DLL_PCS.dl_rx_ready));
-      payload_q[i] = TX_DLL_PCS.dl_rx_data;
-      `uvm_info("RX_PKT", $sformatf("RC: Received DATA on TX_DLL_PCS.dl_rx_data = %08h", payload_q[i]), UVM_LOW)
-
-      lcrc_pkt_q.push_back(payload_q[i]);
-   r_x.rc_com_data_sb.push_back(payload_q[i]);
-
+    if (TX_DLL_PCS.dl_rx_valid && TX_DLL_PCS.dl_rx_ready) begin
+      dw = TX_DLL_PCS.dl_rx_data;
+      `uvm_info("RX_PKT", $sformatf("RC: Received DATA on TX_DLL_PCS.dl_rx_data = %08h", dw), UVM_LOW)
+      body_q.push_back(dw);
     end
-
+    if (!TX_DLL_PCS.dl_rx_valid)
+      break;
   end
-
   ////////////////////////////////////////////////////////////
-  // ECRC
+  // LAST DW = LCRC, REST = HEADER+PAYLOAD+ECRC
   ////////////////////////////////////////////////////////////
-
-  if(td_bit) begin
-
-     do begin
-	  
-    @(negedge TX_DLL_PCS.CLK);
-
+  lcrc = body_q.pop_back();
+  foreach(body_q[i]) begin
+    lcrc_pkt_q.push_back(body_q[i]);
+    r_x.rc_com_data_sb.push_back(body_q[i]);
   end
-  while(!(TX_DLL_PCS.dl_rx_valid &&
-          TX_DLL_PCS.dl_rx_ready));
-
-    ecrc = TX_DLL_PCS.dl_rx_data;
-
-    `uvm_info("RX_PKT", $sformatf("RC: Received DATA on TX_DLL_PCS.dl_rx_data = %08h", ecrc), UVM_LOW)
-
-    lcrc_pkt_q.push_back(ecrc);
-   r_x.rc_com_data_sb.push_back(ecrc);
-
-  end
-
-  ////////////////////////////////////////////////////////////
-  // LCRC
-  ////////////////////////////////////////////////////////////
-
-  do begin
-	  
-    @(negedge TX_DLL_PCS.CLK);
-
-  end
-  while(!(TX_DLL_PCS.dl_rx_valid &&
-          TX_DLL_PCS.dl_rx_ready));
-  lcrc = TX_DLL_PCS.dl_rx_data;
-  `uvm_info("RX_PKT", $sformatf("RC: Received DATA on TX_DLL_PCS.dl_rx_data = %08h", lcrc), UVM_LOW)
-   r_x.rc_com_data_sb.push_back(lcrc);
-  
+  r_x.rc_com_data_sb.push_back(lcrc);
 /////////////////////////////call_write_for_SB/////////////////////
    rc_rx.write(r_x);
-
-    //   
   calc_lcrc = rc_calculate_lcrc(lcrc_pkt_q);
-
   ////////////////////////////////////////////////////////////
   // LCRC CHECK
   ////////////////////////////////////////////////////////////
-
   `uvm_info("LCRC_CHECK", $sformatf("RC: LCRC MATCH - Calculated LCRC = %08h, Received LCRC = %08h", calc_lcrc, lcrc), UVM_LOW)
   `uvm_info("LCRC_CHECK", $sformatf("EP: LCRC MATCH - Calculated LCRC = %08h, Received LCRC = %08h", calc_lcrc, lcrc), UVM_LOW)
   if(calc_lcrc == lcrc) begin
-
    if(seq_no == RC_NRS)
   begin
-
     rc_ack_ev.trigger();
     
     r_x.rc_ack_nak_seq = seq_no;
-
     RC_NRS = RC_NRS + 1;
-
     RC_NACK_SCHEDULED = 0;
-
     //////////////////////////////////////////////////////////
-    // STORE HEADER
+    // STORE HEADER+PAYLOAD+ECRC (everything but LCRC)
     //////////////////////////////////////////////////////////
-
-    for(int i = 0; i < hdr_len; i++)
-      r_x.rx_data_t.push_back(header[i]);
-
-    //////////////////////////////////////////////////////////
-    // STORE PAYLOAD
-    //////////////////////////////////////////////////////////
-
-    if(has_data) begin
-
-      for(int i = 0; i < payload_length; i++)
-        r_x.rx_data_t.push_back(payload_q[i]);
-
-    end
-
-    //////////////////////////////////////////////////////////
-    // STORE ECRC
-    //////////////////////////////////////////////////////////
-
-    if(td_bit)
-      r_x.rx_data_t.push_back(ecrc);
-    
+    foreach(body_q[i])
+      r_x.rx_data_t.push_back(body_q[i]);
   end
     else if(seq_no < RC_NRS)
   begin
@@ -817,7 +573,6 @@ do begin
     
     r_x.rc_ack_nak_seq = seq_no;
     RC_NACK_SCHEDULED = 0;
-
   end
     else if(seq_no > RC_NRS)
   begin
@@ -833,26 +588,21 @@ do begin
     RC_NACK_SCHEDULED = 1;
     
     end
-
   end
   end  else begin
-
         `uvm_info("LCRC_CHECK", $sformatf("RC: LCRC MISMATCH - Calculated LCRC = %08h, Received LCRC = %08h", calc_lcrc, lcrc), UVM_LOW)
         `uvm_error("TX_DLL_MON",
                $sformatf("LCRC MISMATCH : CALCULATED LCRC = %08h RECEIVED LCRC = %08h",
                          calc_lcrc,
                          lcrc))
 	      if(RC_NACK_SCHEDULED == 0) begin
-
     rc_nack_ev.trigger();
-
     if(RC_NRS == 0) begin
      r_x.rc_ack_nak_seq = 4095;
      end
     else begin
     r_x.rc_ack_nak_seq = RC_NRS-1;
     end
-
     RC_NACK_SCHEDULED = 1;
      
      end
@@ -862,169 +612,51 @@ do begin
 endtask
 
 task rc_collect_request(Sequence_item t_x);
-
   bit [31:0] seq_no;
-
-  bit [31:0] header[4];
-  bit [31:0] payload_q[1024];
-
-  bit [31:0] ecrc;
-  bit [31:0] lcrc;
-  bit [31:0] calc_lcrc;
-
-  bit [31:0] lcrc_pkt_q[$];
-
-  int payload_length;
-  int hdr_len;
-
-  bit [2:0] fmt;
-  bit td_bit;
-  bit has_data;
-
+  bit [31:0] dw;
+  bit [31:0] header0;
+  bit [31:0] body_q[$];   // remaining DWs: header1..N + payload + ecrc + lcrc
   t_x.tx_data_sb.delete();
-
+  body_q.delete();
   ////////////////////////////////////////////////////////////
   // SEQ NUM
   ////////////////////////////////////////////////////////////
-   //   @(posedge RX_DLL_PCS.CLK);
-   //
    
  if(TX_DLL_PCS.tl_packet) begin
-
   if(TX_DLL_PCS.dl_tx_valid && TX_DLL_PCS.dl_tx_ready)	
   seq_no = TX_DLL_PCS.dl_tx_data;
-
   ////////////////////////////////////////////////////////////
   // HEADER DW0
   ////////////////////////////////////////////////////////////
-
   do begin
     @(negedge TX_DLL_PCS.CLK);
   end
   while(!(TX_DLL_PCS.dl_tx_valid &&
           TX_DLL_PCS.dl_tx_ready));
-
-  header[0] = TX_DLL_PCS.dl_tx_data;
-
+  header0 = TX_DLL_PCS.dl_tx_data;
   ////////////////////////////////////////////////////////////
-  // HEADER LENGTH
+  // COLLECT REST OF PACKET - no fmt/hdr_len/payload_length/td_bit
+  // decode. Ride the handshake DW by DW until dl_tx_valid drops;
+  // last DW collected is LCRC, everything else is the rest of
+  // header + payload + ecrc.
   ////////////////////////////////////////////////////////////
-
-  fmt = header[0][31:29];
-
-  if((fmt == 3'b000) ||
-     (fmt == 3'b010))
-    hdr_len = 3;
-  else
-    hdr_len = 4;
-
-  ////////////////////////////////////////////////////////////
-  // REMAINING HEADER DWS
-  ////////////////////////////////////////////////////////////
-
-  for(int i = 1; i < hdr_len; i++) begin
-
-     do begin
+  while (1) begin
     @(negedge TX_DLL_PCS.CLK);
-  end
-  while(!(TX_DLL_PCS.dl_tx_valid &&
-          TX_DLL_PCS.dl_tx_ready));
-
-    header[i] = TX_DLL_PCS.dl_tx_data;
-
-  end
-
-  ////////////////////////////////////////////////////////////
-  // PAYLOAD INFO
-  ////////////////////////////////////////////////////////////
-
-  payload_length = header[0][9:0];
-
-  has_data = (fmt == 3'b010) ||
-             (fmt == 3'b011);
-
-  td_bit = header[0][15];
-
-  ////////////////////////////////////////////////////////////
-  // PAYLOAD
-  ////////////////////////////////////////////////////////////
-
-  if(has_data) begin
-
-    for(int i = 0; i < payload_length; i++) begin
-
-       do begin
-    @(negedge TX_DLL_PCS.CLK);
-  end
-  while(!(TX_DLL_PCS.dl_tx_valid &&
-          TX_DLL_PCS.dl_tx_ready));
-
-      payload_q[i] = TX_DLL_PCS.dl_tx_data;
-
+    if (TX_DLL_PCS.dl_tx_valid && TX_DLL_PCS.dl_tx_ready) begin
+      dw = TX_DLL_PCS.dl_tx_data;
+      body_q.push_back(dw);
     end
-
+    if (!TX_DLL_PCS.dl_tx_valid)
+      break;
   end
-
-  ////////////////////////////////////////////////////////////
-  // ECRC
-  ////////////////////////////////////////////////////////////
-
-  if(td_bit) begin
-
-     do begin
-    @(negedge TX_DLL_PCS.CLK);
-  end
-  while(!(TX_DLL_PCS.dl_tx_valid &&
-          TX_DLL_PCS.dl_tx_ready));
-
-    ecrc = TX_DLL_PCS.dl_tx_data;
-
-  end
-
-  ////////////////////////////////////////////////////////////
-  // LCRC
-  ////////////////////////////////////////////////////////////
-
-    do begin
-    @(negedge TX_DLL_PCS.CLK);
-  end
-  while(!(TX_DLL_PCS.dl_tx_valid &&
-          TX_DLL_PCS.dl_tx_ready));
-
-  lcrc = TX_DLL_PCS.dl_tx_data;
-
    // STORE SEQ_NO
       t_x.tx_data_sb.push_back(seq_no);
-
-    // STORE HEADER
-
-    for(int i = 0; i < hdr_len; i++)
-      t_x.tx_data_sb.push_back(header[i]);
-
-    // STORE PAYLOAD
-
-    if(has_data) begin
-
-      for(int i = 0; i < payload_length; i++)
-        t_x.tx_data_sb.push_back(payload_q[i]);
-
-    end
-
-    // STORE ECRC
-
-    if(td_bit)
-      t_x.tx_data_sb.push_back(ecrc);
-
-    // STORE LCRC
-
-      t_x.tx_data_sb.push_back(lcrc);
-
-    
-   foreach(t_x.tx_data_sb[i]) begin
-
+   // STORE HEADER DW0
+      t_x.tx_data_sb.push_back(header0);
+   // STORE REST (header1..N + payload + ecrc + lcrc, in order received)
+   foreach(body_q[i])
+      t_x.tx_data_sb.push_back(body_q[i]);
   end
-  end
-
 endtask
 task rc_collect_dllp_sb(Sequence_item t_x);
     bit [31:0] header [2];
@@ -1212,147 +844,34 @@ task ep_monitor_rx();
 endtask
 
 task ep_collect_data_tx(Sequence_item t_x);
-
-  bit [31:0] header[4];
-  bit [31:0] payload_q[1024];
-
-  bit [31:0] ecrc;
-
-  int payload_length;
-  int hdr_len;
-
-  bit [2:0] fmt;
-  bit td_bit;
-  bit has_data;
-
+  bit [31:0] data_dw;
   ////////////////////////////////////////////////////
   // Wait For Start Of Packet
   ////////////////////////////////////////////////////
-
+  t_x.tx_data.delete();
     @(negedge RX_TL_DL.CLK);
  
     wait(RX_TL_DL.tl_tx_valid);
-
   
       @(posedge RX_TL_DL.CLK);
-
   wait(RX_TL_DL.tl_tx_valid &&
        RX_TL_DL.tl_tx_ready);
-
   ////////////////////////////////////////////////////
-  // HEADER DW0
+  // Collect every DW while valid stays asserted - no
+  // fmt/hdr_len/payload_length/td_bit decode, ride the
+  // handshake until tl_tx_valid deasserts.
   ////////////////////////////////////////////////////
-
-  header[0] = RX_TL_DL.tl_tx_data;
-
-  ////////////////////////////////////////////////////
-  // Decode Header Length
-  ////////////////////////////////////////////////////
-
-  fmt = header[0][31:29];
-
-  if((fmt == 3'b000) ||
-     (fmt == 3'b010))
-    hdr_len = 3;
-  else
-    hdr_len = 4;
-
-  ////////////////////////////////////////////////////
-  // Remaining Header DWs
-  ////////////////////////////////////////////////////
-
-  for(int i = 1; i < hdr_len; i++) begin
-
+  data_dw = RX_TL_DL.tl_tx_data;
+  t_x.tx_data.push_back(data_dw);
+  while (1) begin
     @(posedge RX_TL_DL.CLK);
-
-    wait(RX_TL_DL.tl_tx_valid &&
-         RX_TL_DL.tl_tx_ready);
-
-    header[i] = RX_TL_DL.tl_tx_data;
-
-              rc_nack_ev = uvm_event_pool::get_global("RC_NAK_DLLP_EVENT");
-    rc_ack_ev  = uvm_event_pool::get_global("RC_ACK_DLLP_EVENT");
-
-  end
-
-  ////////////////////////////////////////////////////
-  // Payload Info
-  ////////////////////////////////////////////////////
-
-  payload_length = header[0][9:0];
-
-  has_data = (fmt == 3'b000) ||
-  (fmt == 3'b010);
-
-  td_bit = header[0][15];
-
-  ////////////////////////////////////////////////////
-  // Payload Collection
-  ////////////////////////////////////////////////////
-
-  if(has_data) begin
-
-    for(int i = 0; i < payload_length; i++) begin
-
-      @(posedge RX_TL_DL.CLK);
-
-      wait(RX_TL_DL.tl_tx_valid &&
-           RX_TL_DL.tl_tx_ready);
-
-      payload_q[i] = RX_TL_DL.tl_tx_data;
-
+    if (RX_TL_DL.tl_tx_valid && RX_TL_DL.tl_tx_ready) begin
+      data_dw = RX_TL_DL.tl_tx_data;
+      t_x.tx_data.push_back(data_dw);
     end
-
+    if (!RX_TL_DL.tl_tx_valid)
+      break;
   end
-
-  ////////////////////////////////////////////////////
-  // ECRC Collection
-  ////////////////////////////////////////////////////
-
-  if(td_bit) begin
-
-    @(posedge RX_TL_DL.CLK);
-
-    wait(RX_TL_DL.tl_tx_valid &&
-         RX_TL_DL.tl_tx_ready);
-
-    ecrc = RX_TL_DL.tl_tx_data;
-
-  end
-
-  ////////////////////////////////////////////////////
-  // Store Header Into tx_data Queue
-  ////////////////////////////////////////////////////
-
-  for(int i = 0; i < hdr_len; i++)
-    t_x.tx_data.push_back(header[i]);
-
-  ////////////////////////////////////////////////////
-  // Store Payload Into tx_data Queue
-  ////////////////////////////////////////////////////
-
-  if(has_data) begin
-
-    for(int i = 0; i < payload_length; i++)
-      t_x.tx_data.push_back(payload_q[i]);
-
-  end
-
-  ////////////////////////////////////////////////////
-  // Store ECRC Into tx_data Queue
-  ////////////////////////////////////////////////////
-
-  if(td_bit)
-    t_x.tx_data.push_back(ecrc);
-
-  ////////////////////////////////////////////////////
-  // Final Packet Dump
-  ////////////////////////////////////////////////////
-
-  foreach(t_x.tx_data[i]) begin
-
-  end
-
 endtask
 
 task ep_collect_dllp(Sequence_item r_x);
@@ -1459,215 +978,67 @@ task ep_collect_dllp(Sequence_item r_x);
 endtask
 
 task ep_collect_tlp(Sequence_item r_x);
-
   bit [31:0] seq_no;
-
-  bit [31:0] header[4];
-  bit [31:0] payload_q[1024];
-
-  bit [31:0] ecrc;
+  bit [31:0] dw;
+  bit [31:0] body_q[$];
   bit [31:0] lcrc;
   bit [31:0] calc_lcrc;
-
   bit [31:0] lcrc_pkt_q[$];
-
-  int payload_length;
-  int hdr_len;
-
-  bit [2:0] fmt;
-  bit td_bit;
-  bit has_data;
-
   r_x.rx_data.delete();
   lcrc_pkt_q.delete();
   r_x.ep_req_data_sb.delete();
-
+  body_q.delete();
   ////////////////////////////////////////////////////////////
   // SEQ NUM
   ////////////////////////////////////////////////////////////
-   //   @(posedge RX_DLL_PCS.CLK);
-   //
    
  if(RX_DLL_PCS.tl_mac_packet) begin
-
   if(RX_DLL_PCS.dl_rx_valid && RX_DLL_PCS.dl_rx_ready)	
   seq_no = RX_DLL_PCS.dl_rx_data;
   `uvm_info("RX_PKT", $sformatf("EP: Received DATA on RX_DLL_PCS.dl_rx_data = %08h", seq_no), UVM_LOW)
-
   lcrc_pkt_q.push_back(seq_no);
   r_x.ep_req_data_sb.push_back(seq_no);
-
   ////////////////////////////////////////////////////////////
-  // HEADER DW0
+  // COLLECT REST OF PACKET - no fmt/hdr_len/payload_length/td_bit
+  // decode. Ride the handshake DW by DW until dl_rx_valid drops;
+  // last DW collected is LCRC, everything before it is
+  // header+payload+ecrc combined.
   ////////////////////////////////////////////////////////////
-
-  do begin
+  while (1) begin
     @(negedge RX_DLL_PCS.CLK);
-  end
-  while(!(RX_DLL_PCS.dl_rx_valid &&
-          RX_DLL_PCS.dl_rx_ready));
-
-  header[0] = RX_DLL_PCS.dl_rx_data;
-
-  `uvm_info("RX_PKT", $sformatf("EP: Received DATA on RX_DLL_PCS.dl_rx_data = %08h", header[0]), UVM_LOW)
-
-  lcrc_pkt_q.push_back(header[0]);
-  r_x.ep_req_data_sb.push_back(header[0]);
-
-  ////////////////////////////////////////////////////////////
-  // HEADER LENGTH
-  ////////////////////////////////////////////////////////////
-
-  fmt = header[0][31:29];
-
-  if((fmt == 3'b000) ||
-     (fmt == 3'b010))
-    hdr_len = 3;
-  else
-    hdr_len = 4;
-
-  ////////////////////////////////////////////////////////////
-  // REMAINING HEADER DWS
-  ////////////////////////////////////////////////////////////
-
-  for(int i = 1; i < hdr_len; i++) begin
-
-    do begin
-      @(negedge RX_DLL_PCS.CLK);
+    if (RX_DLL_PCS.dl_rx_valid && RX_DLL_PCS.dl_rx_ready) begin
+      dw = RX_DLL_PCS.dl_rx_data;
+      `uvm_info("RX_PKT", $sformatf("EP: Received DATA on RX_DLL_PCS.dl_rx_data = %08h", dw), UVM_LOW)
+      body_q.push_back(dw);
     end
-    while(!(RX_DLL_PCS.dl_rx_valid &&
-            RX_DLL_PCS.dl_rx_ready));
-
-    header[i] = RX_DLL_PCS.dl_rx_data;
-
-    `uvm_info("RX_PKT", $sformatf("EP: Received DATA on RX_DLL_PCS.dl_rx_data = %08h", header[i]), UVM_LOW)
-
-    lcrc_pkt_q.push_back(header[i]);
-    r_x.ep_req_data_sb.push_back(header[i]);
-
+    if (!RX_DLL_PCS.dl_rx_valid)
+      break;
   end
-
-  ////////////////////////////////////////////////////////////
-  // PAYLOAD INFO
-  ////////////////////////////////////////////////////////////
-
-  payload_length = header[0][9:0];
-
-  has_data = (fmt == 3'b010) ||
-             (fmt == 3'b011);
-
-  td_bit = header[0][15];
-
-  ////////////////////////////////////////////////////////////
-  // PAYLOAD
-  ////////////////////////////////////////////////////////////
-
-  if(has_data) begin
-
-    for(int i = 0; i < payload_length; i++) begin
-
-      do begin
-        @(negedge RX_DLL_PCS.CLK);
-      end
-      while(!(RX_DLL_PCS.dl_rx_valid &&
-              RX_DLL_PCS.dl_rx_ready));
-
-      payload_q[i] = RX_DLL_PCS.dl_rx_data;
-
-      `uvm_info("RX_PKT", $sformatf("EP: Received DATA on RX_DLL_PCS.dl_rx_data = %08h", payload_q[i]), UVM_LOW)
-
-      lcrc_pkt_q.push_back(payload_q[i]);
-      r_x.ep_req_data_sb.push_back(payload_q[i]);
-
-    end
-
+  lcrc = body_q.pop_back();
+  foreach(body_q[i]) begin
+    lcrc_pkt_q.push_back(body_q[i]);
+    r_x.ep_req_data_sb.push_back(body_q[i]);
   end
-
-  ////////////////////////////////////////////////////////////
-  // ECRC
-  ////////////////////////////////////////////////////////////
-
-  if(td_bit) begin
-
-    do begin
-      @(negedge RX_DLL_PCS.CLK);
-    end
-    while(!(RX_DLL_PCS.dl_rx_valid &&
-            RX_DLL_PCS.dl_rx_ready));
-
-    ecrc = RX_DLL_PCS.dl_rx_data;
-
-    `uvm_info("RX_PKT", $sformatf("EP: Received DATA on RX_DLL_PCS.dl_rx_data = %08h", ecrc), UVM_LOW)
-
-    lcrc_pkt_q.push_back(ecrc);
-   r_x.ep_req_data_sb.push_back(ecrc);
-
-  
-  end
-
-  ////////////////////////////////////////////////////////////
-  // LCRC
-  ////////////////////////////////////////////////////////////
-
-  do begin
-    @(negedge RX_DLL_PCS.CLK);
-  end
-  while(!(RX_DLL_PCS.dl_rx_valid &&
-          RX_DLL_PCS.dl_rx_ready));
-
-  lcrc = RX_DLL_PCS.dl_rx_data;
-
   `uvm_info("RX_PKT", $sformatf("EP: Received DATA on RX_DLL_PCS.dl_rx_data = %08h", lcrc), UVM_LOW)
   r_x.ep_req_data_sb.push_back(lcrc);
-
   ep_rx.write(r_x); //////////SENDING_SB/////////
-
-  
   calc_lcrc = ep_calculate_lcrc(lcrc_pkt_q);
-
   ////////////////////////////////////////////////////////////
   // LCRC CHECK
   ////////////////////////////////////////////////////////////
-
   if(calc_lcrc == lcrc) begin
-
 if(seq_no == EP_NRS)
   begin
-
     ep_ack_ev.trigger();
     
     r_x.ep_ack_nak_seq = seq_no;
-
     EP_NRS = EP_NRS + 1;
-
     EP_NACK_SCHEDULED = 0;
-
-    
     //////////////////////////////////////////////////////////
-    // STORE HEADER
+    // STORE HEADER+PAYLOAD+ECRC (everything but LCRC)
     //////////////////////////////////////////////////////////
-
-    for(int i = 0; i < hdr_len; i++)
-      r_x.rx_data.push_back(header[i]);
-
-    //////////////////////////////////////////////////////////
-    // STORE PAYLOAD
-    //////////////////////////////////////////////////////////
-
-    if(has_data) begin
-
-      for(int i = 0; i < payload_length; i++)
-        r_x.rx_data.push_back(payload_q[i]);
-
-    end
-
-    //////////////////////////////////////////////////////////
-    // STORE ECRC
-    //////////////////////////////////////////////////////////
-
-    if(td_bit)
-      r_x.rx_data.push_back(ecrc);
-    
+    foreach(body_q[i])
+      r_x.rx_data.push_back(body_q[i]);
     end
     
     else if(seq_no < EP_NRS)
@@ -1676,7 +1047,6 @@ if(seq_no == EP_NRS)
     
     r_x.ep_ack_nak_seq = seq_no;
      EP_NACK_SCHEDULED = 0;
-
   end
     else if(seq_no > EP_NRS)
   begin
@@ -1690,24 +1060,19 @@ if(seq_no == EP_NRS)
     r_x.ep_ack_nak_seq = EP_NRS-1;
     end
     EP_NACK_SCHEDULED = 1;
-
   end
   end
-
   end
   else begin
-
     `uvm_info("LCRC_CHECK", $sformatf("EP: LCRC MISMATCH - Calculated LCRC = %08h, Received LCRC = %08h", calc_lcrc, lcrc), UVM_LOW)
     `uvm_error("RX_DLL_MON",
                $sformatf("LCRC MISMATCH : CALCULATED LCRC = %08h RECEIVED LCRC = %08h",
                          calc_lcrc,
                          lcrc))
 	      if(EP_NACK_SCHEDULED == 0) begin
-
     ep_nack_ev.trigger();
     
     EP_NACK_SCHEDULED = 1;
-
          if(EP_NRS==0) begin
 	        r_x.ep_ack_nak_seq = 4095;
     end
@@ -1715,174 +1080,56 @@ if(seq_no == EP_NRS)
     r_x.ep_ack_nak_seq = EP_NRS-1;
     end
                end
-
   end
  
 end
-
 endtask
 
 task ep_collect_completion(Sequence_item t_x);
-
   bit [31:0] seq_no;
-
-  bit [31:0] header[4];
-  bit [31:0] payload_q[1024];
-
-  bit [31:0] ecrc;
-  bit [31:0] lcrc;
-  bit [31:0] calc_lcrc;
-
-  bit [31:0] lcrc_pkt_q[$];
-
-  int payload_length;
-  int hdr_len;
-
-  bit [2:0] fmt;
-  bit td_bit;
-  bit has_data;
-
+  bit [31:0] dw;
+  bit [31:0] header0;
+  bit [31:0] body_q[$];
   t_x.rx_data_sb.delete();
-
+  body_q.delete();
   ////////////////////////////////////////////////////////////
   // SEQ NUM
   ////////////////////////////////////////////////////////////
-   //   @(posedge RX_DLL_PCS.CLK);
-   //
    
  if(RX_DLL_PCS.tl_packet) begin
-
   if(RX_DLL_PCS.dl_tx_valid && RX_DLL_PCS.dl_tx_ready)	
   seq_no = RX_DLL_PCS.dl_tx_data;
-
   ////////////////////////////////////////////////////////////
   // HEADER DW0
   ////////////////////////////////////////////////////////////
-
   do begin
     @(negedge RX_DLL_PCS.CLK);
   end
   while(!(RX_DLL_PCS.dl_tx_valid &&
           RX_DLL_PCS.dl_tx_ready));
-
-  header[0] = RX_DLL_PCS.dl_tx_data;
-
+  header0 = RX_DLL_PCS.dl_tx_data;
   ////////////////////////////////////////////////////////////
-  // HEADER LENGTH
+  // COLLECT REST OF PACKET - no fmt/hdr_len/payload_length/td_bit
+  // decode. Ride the handshake DW by DW until dl_tx_valid drops;
+  // last DW collected is LCRC.
   ////////////////////////////////////////////////////////////
-
-  fmt = header[0][31:29];
-
-  if((fmt == 3'b000) ||
-     (fmt == 3'b010))
-    hdr_len = 3;
-  else
-    hdr_len = 4;
-
-  ////////////////////////////////////////////////////////////
-  // REMAINING HEADER DWS
-  ////////////////////////////////////////////////////////////
-
-  for(int i = 1; i < hdr_len; i++) begin
-
-     do begin
+  while (1) begin
     @(negedge RX_DLL_PCS.CLK);
-  end
-  while(!(RX_DLL_PCS.dl_tx_valid &&
-          RX_DLL_PCS.dl_tx_ready));
-
-    header[i] = RX_DLL_PCS.dl_tx_data;
-
-  end
-
-  ////////////////////////////////////////////////////////////
-  // PAYLOAD INFO
-  ////////////////////////////////////////////////////////////
-
-  payload_length = header[0][9:0];
-
-  has_data = (fmt == 3'b010) ||
-             (fmt == 3'b011);
-
-  td_bit = header[0][15];
-
-  ////////////////////////////////////////////////////////////
-  // PAYLOAD
-  ////////////////////////////////////////////////////////////
-
-  if(has_data) begin
-
-    for(int i = 0; i < payload_length; i++) begin
-
-       do begin
-    @(negedge RX_DLL_PCS.CLK);
-  end
-  while(!(RX_DLL_PCS.dl_tx_valid &&
-          RX_DLL_PCS.dl_tx_ready));
-
-      payload_q[i] = RX_DLL_PCS.dl_tx_data;
-
+    if (RX_DLL_PCS.dl_tx_valid && RX_DLL_PCS.dl_tx_ready) begin
+      dw = RX_DLL_PCS.dl_tx_data;
+      body_q.push_back(dw);
     end
-
+    if (!RX_DLL_PCS.dl_tx_valid)
+      break;
   end
-
-  ////////////////////////////////////////////////////////////
-  // ECRC
-  ////////////////////////////////////////////////////////////
-
-  if(td_bit) begin
-
-     do begin
-    @(negedge RX_DLL_PCS.CLK);
-  end
-  while(!(RX_DLL_PCS.dl_tx_valid &&
-          RX_DLL_PCS.dl_tx_ready));
-
-    ecrc = RX_DLL_PCS.dl_tx_data;
-
-  end
-
-  ////////////////////////////////////////////////////////////
-  // LCRC
-  ////////////////////////////////////////////////////////////
-
-    do begin
-    @(negedge RX_DLL_PCS.CLK);
-  end
-  while(!(RX_DLL_PCS.dl_tx_valid &&
-          RX_DLL_PCS.dl_tx_ready));
-
-  lcrc = RX_DLL_PCS.dl_tx_data;
-
    // STORE SEQ_NO
       t_x.rx_data_sb.push_back(seq_no);
-
-    // STORE HEADER
-
-    for(int i = 0; i < hdr_len; i++)
-      t_x.rx_data_sb.push_back(header[i]);
-
-    // STORE PAYLOAD
-
-    if(has_data) begin
-
-      for(int i = 0; i < payload_length; i++)
-        t_x.rx_data_sb.push_back(payload_q[i]);
-
-    end
-
-    // STORE ECRC
-
-    if(td_bit)
-      t_x.rx_data_sb.push_back(ecrc);
-
-    // STORE LCRC
-
-      t_x.rx_data_sb.push_back(lcrc);
-
-    
-     end
-
+   // STORE HEADER DW0
+      t_x.rx_data_sb.push_back(header0);
+   // STORE REST (header1..N + payload + ecrc + lcrc, in order received)
+   foreach(body_q[i])
+      t_x.rx_data_sb.push_back(body_q[i]);
+   end
 endtask
 task ep_collect_dllp_sb(Sequence_item t_x);
     bit [31:0] header [2];
@@ -1953,6 +1200,3 @@ endtask
   endtask
 
 endclass : PCIe_DLL_Monitor
-
-
-
