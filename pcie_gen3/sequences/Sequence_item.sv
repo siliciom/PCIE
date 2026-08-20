@@ -812,8 +812,7 @@ register_num, ext_register_num, dw), UVM_NONE)
     
     function bit [31:0] calculate_ecrc();
       bit [31:0] crc;
-      int i; 
-      byte bits;
+      bit [31:0] ecrc;
       bit data_bit;
       bit feedback;
       
@@ -824,15 +823,32 @@ register_num, ext_register_num, dw), UVM_NONE)
         for(int b = 0; b < 32; b++) begin
           
           data_bit  = tlp_q[i][b];
+
           feedback  = crc[0] ^ data_bit;
-          crc = crc << 1;
+
+          crc = crc >> 1;
           
           if(feedback)
-            crc ^= 32'h04C11DB7;
+            crc ^= 32'hEDB8_8320;// Standard Polynomial - 04C11DB7
+
         end
+
       end
       
-      return ~crc;
+      crc = ~crc;
+
+      for (int byte_num = 0; byte_num < 4; byte_num++) begin
+
+       for (int bit_num = 0; bit_num < 8; bit_num++) begin
+
+         ecrc[byte_num*8 + bit_num] = crc[byte_num*8 + (7-bit_num)];
+
+       end
+
+     end
+
+     return ecrc;
+
     
     endfunction : calculate_ecrc
 

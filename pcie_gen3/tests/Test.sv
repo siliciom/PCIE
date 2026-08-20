@@ -541,7 +541,7 @@ class B2B_Mem_Wr_Rd_3DW_test extends pcie_base_test;
     offset % 4 == 0;     
     });
 
-    curr_addr = bar_base[3] + offset;
+    curr_addr = bar_base[0] + offset;
 
     Seq_tx1 = B2B_Mem_Wr_Rd_3DW::type_id::create("Seq_tx1");
     Seq_tx1.p_wr_fmt = bar_wr_fmt[0];
