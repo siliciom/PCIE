@@ -29,8 +29,6 @@ class pcie_base_test extends uvm_test;
   // Enumeration state - populated by do_enumeration(), read by
   // every derived test class.
   //---------------------------------------------------------------
-  uvm_tlm_analysis_fifo #(Sequence_item) cpl_fifo;
-
   bit        device_present;
   bit [15:0] vendor_id, device_id;
   bit [7:0]  header_type;
@@ -62,13 +60,12 @@ class pcie_base_test extends uvm_test;
     string rc_name, ep_name;
     super.build_phase(phase);
 
-    cpl_fifo = new("cpl_fifo", this);
 
     TL_Scb  = TL_Scoreboard::type_id::create("TL_Scb",  this);
     Top_Scb = Scoreboard_Top::type_id::create("Top_Scb", this);
- mac_scb = PCIe_MAC_Scoreboard::type_id::create("mac_scb",this);
-   DL_Scb  = DL_Scoreboard::type_id::create("DL_Scb", this);
-  pcie_cov  = PCIe_TL_Coverage::type_id::create("pcie_cov", this);
+    mac_scb = PCIe_MAC_Scoreboard::type_id::create("mac_scb",this);
+    DL_Scb  = DL_Scoreboard::type_id::create("DL_Scb", this);
+    pcie_cov  = PCIe_TL_Coverage::type_id::create("pcie_cov", this);
 
     RC_Env = new[num_rc];
     rc_cfg = new[num_rc];
@@ -85,9 +82,9 @@ class pcie_base_test extends uvm_test;
       uvm_config_db#(env_cfg)::set(this, {rc_name, ".*"}, "env_cfg", rc_cfg[i]);
       uvm_config_db#(env_cfg)::set(this,  rc_name,        "env_cfg", rc_cfg[i]);
       uvm_config_db#(TL_Scoreboard)::set(this, rc_name, "TL_Scb", TL_Scb);
-       uvm_config_db#(PCIe_MAC_Scoreboard)::set(this, rc_name, "mac_scb", mac_scb);
- uvm_config_db#(DL_Scoreboard)::set(this, rc_name, "DL_Scb", DL_Scb);
-  uvm_config_db#(PCIe_TL_Coverage)::set(this, rc_name, "pcie_cov", pcie_cov);
+      uvm_config_db#(PCIe_MAC_Scoreboard)::set(this, rc_name, "mac_scb", mac_scb);
+      uvm_config_db#(DL_Scoreboard)::set(this, rc_name, "DL_Scb", DL_Scb);
+      uvm_config_db#(PCIe_TL_Coverage)::set(this, rc_name, "pcie_cov", pcie_cov);
 
 
       RC_Env[i]  = Env_Top::type_id::create(rc_name, this);
@@ -103,9 +100,9 @@ class pcie_base_test extends uvm_test;
       uvm_config_db#(env_cfg)::set(this, {ep_name, ".*"}, "env_cfg", ep_cfg[i]);
       uvm_config_db#(env_cfg)::set(this,  ep_name,        "env_cfg", ep_cfg[i]);
       uvm_config_db#(TL_Scoreboard)::set(this, ep_name, "TL_Scb", TL_Scb);
-       uvm_config_db#(PCIe_MAC_Scoreboard)::set(this, ep_name, "mac_scb", mac_scb);
-       uvm_config_db#(DL_Scoreboard)::set(this, ep_name, "DL_Scb", DL_Scb);
-       uvm_config_db#(PCIe_TL_Coverage)::set(this, ep_name, "pcie_cov", pcie_cov);
+      uvm_config_db#(PCIe_MAC_Scoreboard)::set(this, ep_name, "mac_scb", mac_scb);
+      uvm_config_db#(DL_Scoreboard)::set(this, ep_name, "DL_Scb", DL_Scb);
+      uvm_config_db#(PCIe_TL_Coverage)::set(this, ep_name, "pcie_cov", pcie_cov);
 
 
 
@@ -119,7 +116,6 @@ class pcie_base_test extends uvm_test;
 
   function void connect_phase(uvm_phase phase);
     super.connect_phase(phase);
-    RC_Env[0].PCIe_TL_Agnt.TX_TL_Mon.TX_TL_Send.connect(cpl_fifo.analysis_export);
 
     TL_Scb.t_port.connect(Top_Scb.t_imp);
     TL_Scb.r_port.connect(Top_Scb.r_imp);
@@ -146,23 +142,29 @@ class pcie_base_test extends uvm_test;
     rd_seq.start(RC_Env[0].PCIe_TL_Agnt.TX_TL_Seqr);
 
     found = 0;
-    while(!found) begin
-      `uvm_info("TEST","Waiting for completion...",UVM_LOW)
-       cpl_fifo.get(cpl);
+     
+    while (!found) begin
+    
+    `uvm_info("TEST","Waiting for completion...",UVM_LOW)
+
+    wait(PCIe_TL_Monitor::cpl_q.size() > 0);
+
+      cpl = PCIe_TL_Monitor::cpl_q.pop_front();
+
       `uvm_info("TEST","Completion received",UVM_LOW)
-      `uvm_info("TEST", $sformatf("REQ TAG = %0d  CPL TAG = %0d  CPL TYPE = %s", rd_seq.req.tag, cpl.tag, cpl.e_type.name()), UVM_LOW)
-      // NOTE: cpl_fifo carries BOTH the echoed outgoing request (from
-      // rc_sending_tx_request) and the real completion (from
-      // rc_collecting_rx_completion) - both tagged the same, since it's
-      // the same transaction. Must qualify on e_type too, or this matches
-      // the request's own echo instead of waiting for the real completion,
-      // letting the next config packet fire before the DUT has completed
-      // the first one.
-      if(cpl.tag == rd_seq.req.tag) begin
+      `uvm_info("TEST", $sformatf("REQ TAG = %0d  CPL TAG = %0d", rd_seq.req.tag, cpl.tag), UVM_LOW)
+
+
+      if (cpl.tag == rd_seq.req.tag) begin
+
         data  = cpl.payload[0];
+        
         found = 1;
+    
       end
+    
     end
+  
   endtask : cfg_read
 
   task cfg_write(bit [3:0] ext_reg, bit [5:0] reg_num, bit [31:0] data, bit [3:0] be = 4'hF);
@@ -178,21 +180,33 @@ class pcie_base_test extends uvm_test;
     wr_seq.start(RC_Env[0].PCIe_TL_Agnt.TX_TL_Seqr);
 
     found = 0;
-    while(!found) begin
-      cpl_fifo.get(cpl);
-      // Same reason as cfg_read: must qualify on e_type == CPL, not just
-      // tag, or this matches the echoed outgoing request instead of the
-      // real completion.
-      if(cpl.tag == wr_seq.req.tag ) found = 1;
+    
+
+    while (!found) begin
+
+    `uvm_info("TEST","Waiting for completion...",UVM_LOW)
+
+
+    wait(PCIe_TL_Monitor::cpl_q.size() > 0);
+
+    cpl = PCIe_TL_Monitor::cpl_q.pop_front();
+
+      `uvm_info("TEST","Completion received",UVM_LOW)
+      `uvm_info("TEST", $sformatf("REQ TAG = %0d  CPL TAG = %0d", wr_seq.req.tag, cpl.tag), UVM_LOW)
+
+
+    if (cpl.tag == wr_seq.req.tag) begin
+        
+        data  = cpl.payload[0];
+        found = 1;
+        
+      end
+
     end
   endtask : cfg_write
 
+   
   //-------------------------------------------------------------
-  // Full enumeration flow - see the class-header comment above for
-  // the step-by-step description.
-  //-------------------------------------------------------------
-  
- //-------------------------------------------------------------
   // Full enumeration flow - see the class-header comment above for
   // the step-by-step description.
   //-------------------------------------------------------------
@@ -366,7 +380,7 @@ class Single_Mem_Wr_Rd_3DW_test extends pcie_base_test;
     Mem_Seq_tx.p_wr_fmt = bar_wr_fmt[0];
     Mem_Seq_tx.p_rd_fmt = bar_rd_fmt[0];
     Mem_Seq_tx.p_addr   = bar_base[0] + 64'h10;
-    Mem_Seq_tx.p_length = 10;
+    Mem_Seq_tx.p_length = 1023;
     `uvm_info("TEST",
 $sformatf("BAR0 Base=%h WR_FMT=%s RD_FMT=%s",
            Mem_Seq_tx.p_addr,
