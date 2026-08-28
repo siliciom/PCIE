@@ -680,7 +680,7 @@ RC_Env[0].PCIe_DLL_Agnt.PCIe_DLL_Drv.cfg.replay_en = 1'b0;
       Seq_tx.p_wr_fmt = bar_wr_fmt[3];
       Seq_tx.p_rd_fmt = bar_rd_fmt[3];
       Seq_tx.p_addr = curr_addr;
-      Seq_tx.p_length =
+      Seq_tx.p_length = 1;
       Seq_tx.start(RC_Env[0].PCIe_TL_Agnt.TX_TL_Seqr);
 
       curr_addr += Seq_tx.p_length * 4;
