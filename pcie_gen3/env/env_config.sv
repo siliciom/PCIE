@@ -7,7 +7,21 @@ class env_cfg extends uvm_object;
   pcie_mode_e mode;
 
   int unsigned gen = 3;
-  
+
+  //-----------------------------------------------------------
+  // DLL/PHY-layer error injection (see err_inject_e in
+  // pcie_top_defines.svh). Set directly on a specific driver's
+  // cfg handle - e.g. RC_Env[0].PCIe_DLL_Agnt.PCIe_DLL_Drv.cfg -
+  // so the direction (RC->EP vs EP->RC) is picked by which side's
+  // cfg a test touches. One-shot scenarios (ERR_LCRC, ERR_DLLP_CRC,
+  // ERR_SEQ_NUM, ERR_STP) are consumed and reset to ERR_NONE by
+  // PCIe_DLL_Driver.sv the very next time the corresponding code
+  // path runs. Durational scenarios (ERR_REPLAY_ROLLOVER,
+  // ERR_REPLAY_TIMER) are held by the test for as long as it wants
+  // the effect, then reset to ERR_NONE explicitly.
+  //-----------------------------------------------------------
+  err_inject_e inject_err = ERR_NONE;
+
 
   //-----------------------------------------------------------
   // TC -> VC mapping table (models the VC Resource Control
@@ -22,7 +36,7 @@ class env_cfg extends uvm_object;
   //-----------------------------------------------------------
    int unsigned num_lanes        = `PCIE_NUM_LANES;
   bit [`PCIE_NUM_LANES-1:0] active_lane_mask = {`PCIE_NUM_LANES{1'b1}};
-
+   bit replay_en;
   //-----------------------------------------------------------
   // LTSSM timing parameters (PCIe Base Spec 3.0 Table in each
   // sub-state's description). Defaults below are the spec values;

@@ -318,7 +318,6 @@ Sequence_item rx_pkt;
 
     end
 
-
     end
 
   endtask
@@ -577,7 +576,16 @@ task rc_collect_tlp(Sequence_item r_x);
     else if(seq_no > RC_NRS)
   begin
     	      if(RC_NACK_SCHEDULED == 0) begin
-	      
+
+    // ERR_SEQ_NUM checker: the sender skipped/jumped ahead of
+    // the sequence number this receiver expected next - a gap in
+    // the DL sequence space. NAK + replay (below/triggered) is the
+    // correct recovery; this uvm_error makes the anomaly explicit
+    // for the negative test to catch.
+    `uvm_error("SEQ_CHECK",
+      $sformatf("Out-of-order/skipped DL sequence number: expected %0d, got %0d",
+                 RC_NRS, seq_no))
+
     rc_nack_ev.trigger();
     if(RC_NRS == 0) begin
      r_x.rc_ack_nak_seq = 4095;
@@ -794,6 +802,9 @@ task ep_monitor_rx();
 
     end
 
+    // ERR_STP checker (EP->RC direction) - see the RC-side
+    // rc_monitor_sb() for the fully-commented version.
+
     end
 
   endtask
@@ -805,9 +816,33 @@ task ep_monitor_rx();
 
     @(negedge RX_TL_DL.CLK);
 
-      fc_pkt = Sequence_item::type_id::create("fc_pkt");
+fc_pkt = Sequence_item::type_id::create("fc_pkt");
 
-  fc_pkt.ep_fc_ph    = RX_TL_DL.fc_ph;
+      if( RX_TL_DL.ep_fc_update_valid) begin
+  fc_pkt.ep_updated_credits = 1 ; 
+  fc_pkt.ep_vc       = RX_TL_DL.ep_fc_update_vc;
+  fc_pkt.ep_fc_ph    = RX_TL_DL.fc_ph[fc_pkt.ep_vc];
+  fc_pkt.ep_fc_nph   = RX_TL_DL.fc_nph[fc_pkt.ep_vc];
+  fc_pkt.ep_fc_cmplh = RX_TL_DL.fc_cmplh[fc_pkt.ep_vc];
+
+  fc_pkt.ep_fc_pd    = RX_TL_DL.fc_pd[fc_pkt.ep_vc];
+  fc_pkt.ep_fc_npd   = RX_TL_DL.fc_npd[fc_pkt.ep_vc];
+  fc_pkt.ep_fc_cmpld = RX_TL_DL.fc_cmpld[fc_pkt.ep_vc];
+  `uvm_info("EP_FC_UPDATE",
+            $sformatf("EP FC Update: PH=%0h, NPH=%0h, CPLH=%0h, PD=%0h, NPD=%0h, CPLD=%0h, VC=%0h",
+                      fc_pkt.ep_fc_ph,
+                      fc_pkt.ep_fc_nph,
+                      fc_pkt.ep_fc_cmplh,
+                      fc_pkt.ep_fc_pd,
+                      fc_pkt.ep_fc_npd,
+                      fc_pkt.ep_fc_cmpld,
+		      fc_pkt.ep_vc),
+            UVM_LOW)
+	    ep_FC_MD_ap.write(fc_pkt);
+	    fc_pkt.ep_updated_credits = 0 ; 
+  end
+  else begin
+    fc_pkt.ep_fc_ph    = RX_TL_DL.fc_ph;
   fc_pkt.ep_fc_nph   = RX_TL_DL.fc_nph;
   fc_pkt.ep_fc_cmplh = RX_TL_DL.fc_cmplh;
 
@@ -816,28 +851,8 @@ task ep_monitor_rx();
   fc_pkt.ep_fc_cmpld = RX_TL_DL.fc_cmpld;
       
       ep_FC_MD_ap.write(fc_pkt);
+      end
 
-      if( RX_TL_DL.ep_fc_update_valid) begin
-  fc_pkt.ep_updated_credits = 1 ; 
-  fc_pkt.ep_fc_ph    = RX_TL_DL.fc_ph;
-  fc_pkt.ep_fc_nph   = RX_TL_DL.fc_nph;
-  fc_pkt.ep_fc_cmplh = RX_TL_DL.fc_cmplh;
-
-  fc_pkt.ep_fc_pd    = RX_TL_DL.fc_pd;
-  fc_pkt.ep_fc_npd   = RX_TL_DL.fc_npd;
-  fc_pkt.ep_fc_cmpld = RX_TL_DL.fc_cmpld;
-  `uvm_info("EP_FC_UPDATE",
-            $sformatf("EP FC Update: PH=%0h, NPH=%0h, CPLH=%0h, PD=%0h, NPD=%0h, CPLD=%0h",
-                      RX_TL_DL.fc_ph,
-                      RX_TL_DL.fc_nph,
-                      RX_TL_DL.fc_cmplh,
-                      RX_TL_DL.fc_pd,
-                      RX_TL_DL.fc_npd,
-                      RX_TL_DL.fc_cmpld),
-            UVM_LOW)
-	    ep_FC_MD_ap.write(fc_pkt);
-	    fc_pkt.ep_updated_credits = 0 ; 
-  end
 
      end 
 
@@ -1051,7 +1066,13 @@ if(seq_no == EP_NRS)
     else if(seq_no > EP_NRS)
   begin
      	      if(EP_NACK_SCHEDULED == 0) begin
-	      
+
+    // ERR_SEQ_NUM checker (EP->RC direction) - see RC-side for
+    // the fully-commented version.
+    `uvm_error("SEQ_CHECK",
+      $sformatf("Out-of-order/skipped DL sequence number: expected %0d, got %0d",
+                 EP_NRS, seq_no))
+
     ep_nack_ev.trigger();
     if(EP_NRS==0) begin
 	        r_x.ep_ack_nak_seq = 4095;

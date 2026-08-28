@@ -291,9 +291,39 @@ class PCIe_MAC_driver extends uvm_driver #(Sequence_item);
     `uvm_info("MAC_TX_DRV", $sformatf("[%s] Write_STARTED", tag), UVM_HIGH)
     foreach(t.dllp_tx_packet[i])
       `uvm_info("MAC_TX_DRV", $sformatf("[%s] DLLP_INITIAL_TX %h %d DWORDs", tag, t.dllp_tx_packet[i], t.dllp_tx_packet.size()), UVM_HIGH)
+    // t.mac_tx_data is a queue-of-queues: outer index [i] = one distinct
+    // TLP, inner index [j] = the DWs of that TLP. Previously this was
+    // flattened straight into rc_received (single dimension) with no
+    // record of where one TLP ended and the next began. When the driver's
+    // TX loop in rc_state_l0() later drained rc_received it called
+    // rc_add_stp_to_all_packets() exactly once per drain, stamping a
+    // single STP (with a single length field) across whatever happened to
+    // have piled up - which is fine for one TLP, but for back-to-back
+    // TLPs (e.g. Multiple_Mem_Wr_Rd_3DW_test, where several TLPs got
+    // queued up before the TX loop was scheduled - seen in sim as 1031 DW
+    // "RC byte-striping" bursts) it wraps ALL of them under one bogus STP
+    // instead of one STP per TLP. The EP-side MAC monitor un-framer
+    // (PCIe_MAC_Monitor.sv, while(rc_r_data.size()>0) / ep_r_data loop)
+    // walks the reassembled stream looking for one STP (4'hF marker) per
+    // TLP and trusts that STP's length field to know how many DWs belong
+    // to it, so a single oversized/garbage STP corrupts the parse and the
+    // later TLPs never resolve into anything the EP receives.
+    //
+    // Fix: frame each TLP with its own STP right here, per row of
+    // t.mac_tx_data, before it goes into the flattened rc_received queue,
+    // so every TLP keeps its own correctly-sized STP no matter how many
+    // TLPs get batched into a single rc_received drain cycle.
     foreach(t.mac_tx_data[i]) begin
-      foreach(t.mac_tx_data[i][j]) begin
-        rc_received.push_back(t.mac_tx_data[i][j]);
+      bit [31:0] rc_tlp_q[$];
+      rc_tlp_q = t.mac_tx_data[i];
+      if(rc_tlp_q.size() > 0) begin
+        rc_add_stp_to_all_packets(rc_tlp_q);
+        `uvm_info("MAC_TX_DRV",
+          $sformatf("[%s] TLP[%0d] framed with own STP: %0d DWORDs (incl. STP)",
+            tag, i, rc_tlp_q.size()), UVM_HIGH)
+      end
+      foreach(rc_tlp_q[j]) begin
+        rc_received.push_back(rc_tlp_q[j]);
       end
     end
     rc_dllp_packet = t.dllp_tx_packet;
@@ -318,9 +348,25 @@ class PCIe_MAC_driver extends uvm_driver #(Sequence_item);
 
    function void write_port_g(Sequence_item t);
     `uvm_info("MAC_RX_DRV", $sformatf("[%s] Write_STARTED", tag), UVM_HIGH)
+    // Mirrors the RC-side fix in write_port_e(): t.mac_rx_data is a
+    // queue-of-queues (one row per TLP). Frame each TLP with its own STP
+    // here, per row, before flattening into the single-dimension
+    // ep_received queue - otherwise back-to-back TLPs queued up before the
+    // EP TX loop (ep_state_l0()) drains ep_received get wrapped under one
+    // bogus whole-batch STP instead of one STP per TLP, and the RC-side
+    // MAC monitor's un-framer (which expects one STP per TLP) fails to
+    // resolve the later TLPs.
     foreach(t.mac_rx_data[i]) begin
-      foreach(t.mac_rx_data[i][j]) begin
-        ep_received.push_back(t.mac_rx_data[i][j]);
+      bit [31:0] ep_tlp_q[$];
+      ep_tlp_q = t.mac_rx_data[i];
+      if(ep_tlp_q.size() > 0) begin
+        ep_add_stp_to_all_packets(ep_tlp_q);
+        `uvm_info("MAC_RX_DRV",
+          $sformatf("[%s] TLP[%0d] framed with own STP: %0d DWORDs (incl. STP)",
+            tag, i, ep_tlp_q.size()), UVM_HIGH)
+      end
+      foreach(ep_tlp_q[j]) begin
+        ep_received.push_back(ep_tlp_q[j]);
       end
     end
     ep_dllp_packet = t.dllp_packet;
@@ -339,12 +385,16 @@ class PCIe_MAC_driver extends uvm_driver #(Sequence_item);
       `uvm_info("MAC_RX_DRV", $sformatf("[%s] Received from PMA DRIVER %0h %d DWORDs", tag, t.tlp_queue_t[i], t.tlp_queue_t.size()), UVM_HIGH)
   endfunction
 
-    function bit parity_calc(input length ,input sequence_number,output f_p );
-    bit [22:0] parity_check = {length,sequence_number};
-    if(^parity_check) f_p = 1'b1;
-    else f_p = 1'b0;
-  endfunction
+ function bit parity_calc(
+    input  length,
+    input  sequence_number
+);
+    bit [22:0] parity_check;
 
+    parity_check = {length, sequence_number};
+
+    return ^parity_check;
+endfunction
   function bit [7:0] rc_d_s(inout bit [7:0] data);
     static bit [22:0] lfsr = 23'h7FFFFF;
     for (int i = 0; i < 8; i++) begin
@@ -477,7 +527,6 @@ localparam bit [1:0] SYNC_HDR = 2'b01;
 bit [7:0]   rc_striped_lanes[`PCIE_NUM_LANES][$];
 bit [129:0] rc_lane_word[`PCIE_NUM_LANES];
 
-// --- striping task fills a queue per lane instead of a single word ---
 bit [129:0] rc_lane_word_q[`PCIE_NUM_LANES][$];// one queue entry per 16B block
 localparam bit [22:0] RC_LANE_SEED[8] = '{
     23'h1DBFBC,  // Lane 0 mod 8
@@ -579,7 +628,7 @@ task rc_byte_striping(input bit [31:0] rc_received[$]);
             rc_lane_word_q[lane].push_back({2'b10, payload});
             `uvm_info("TX_BYTE_STRIPE",
                 $sformatf("Block[%0d] Lane[%0d] = %033h", blk, lane, {2'b10, payload}),
-                UVM_HIGH)
+                UVM_LOW)
         end
     end
 endtask
@@ -594,7 +643,8 @@ task rc_drive_striped_data();
       UVM_LOW)
 
     for (int blk = 0; blk < num_blocks; blk++) begin
-         if(blk != 0) @(posedge rc_pvif.PCLK);
+       //  if(blk != 0) @(posedge rc_pvif.PCLK);
+        @(posedge rc_pvif.PCLK);
         for (int lane = 0; lane < cfg.num_lanes; lane++) begin
             rc_pvif.TxData[lane]      <= rc_lane_word_q[lane][blk];
             rc_pvif.TxDataValid[lane] <= 1;
@@ -613,7 +663,22 @@ function void rc_add_stp_to_all_packets(inout bit [31:0] pkt_q[$]);
     int i;
     int pkt_len;
     bit [31:0] data;
-    for(i = 0; i < pkt_q.size(); ) begin
+    sequence_number = pkt_q[0][12:0];
+      f_p = parity_calc(length, sequence_number);
+      pkt_len = pkt_q.size()+1;
+      stp_pkt = {
+                  pkt_len[3:0],
+                  4'hF,
+                  f_p,
+                  pkt_len[10:4],
+                  fcrc[3:0],
+                  sequence_number[3:0],
+                  sequence_number[11:4]
+                };
+     pkt_q.push_front(stp_pkt);
+
+   
+   /* for(i = 0; i < pkt_q.size(); ) begin
       fmt    = pkt_q[i+1][31:29];
       td     = pkt_q[i+1][15];
       if(fmt == 3'b010 || fmt == 3'b011) begin
@@ -650,7 +715,7 @@ function void rc_add_stp_to_all_packets(inout bit [31:0] pkt_q[$]);
   //      pkt_q[j] = {rc_d_s(data[31:24]),rc_d_s(data[23:16]),rc_d_s(data[15:8]),rc_d_s(data[7:0])};
   //    end
       i = i + pkt_len ;
-    end
+    end*/
   endfunction
 /*
   function void rc_data_scrambling(bit TL_DL);
@@ -1021,6 +1086,20 @@ endtask
     int i;
     int pkt_len;
     bit [31:0] data;
+     sequence_number = pkt_q[0][12:0];
+      f_p = parity_calc(length, sequence_number);
+      pkt_len = pkt_q.size()+1;
+      stp_pkt = {
+                  pkt_len[3:0],
+                  4'hF,
+                  f_p,
+                  pkt_len[10:4],
+                  fcrc[3:0],
+                  sequence_number[3:0],
+                  sequence_number[11:4]
+                };
+     pkt_q.push_front(stp_pkt);
+/*
     for(i = 0; i < pkt_q.size(); ) begin
       fmt    = pkt_q[i+1][31:29];
       td     = pkt_q[i+1][15];
@@ -1058,7 +1137,7 @@ endtask
  //       pkt_q[j] = {ep_d_s(data[31:24]),ep_d_s(data[23:16]),ep_d_s(data[15:8]),ep_d_s(data[7:0])};
  //   end
       i = i + pkt_len ;
-    end
+    end*/
   endfunction
 /*
   function void ep_data_scrambling(bit TL_DL);
@@ -2565,11 +2644,18 @@ endtask
   //		`uvm_info("PIPE_DRV",$sformatf("DLLP_INITIAL_delete: %0p rc_size %d",rc_dllp_packet,rc_dllp_packet.size()),UVM_HIGH)
          end 
          else if(rc_received.size() >0) begin
-        `uvm_info("PIPE_DRV",$sformatf("DATA STP ADDED and BEFORE_Srcambled: %0d",rc_received.size()),UVM_HIGH)
+        `uvm_info("PIPE_DRV",$sformatf("DATA BEFORE_Srcambled: %0d",rc_received.size()),UVM_HIGH)
         foreach(rc_received[i])
         `uvm_info("PIPE_DRV",$sformatf("RC_SCRAMBLED_BEFORE %0h",rc_received[i]),UVM_HIGH)
-        rc_add_stp_to_all_packets(rc_received);
-                `uvm_info("PIPE_DRV",$sformatf("DATA STP ADDED and BEFORE_Srcambled: %0d",rc_received.size()),UVM_HIGH)
+        // NOTE: each TLP already carries its own STP - it was added per-TLP
+        // in write_port_e() (per row of t.mac_tx_data), before being
+        // flattened into this single-dimension rc_received queue. Do NOT
+        // call rc_add_stp_to_all_packets(rc_received) here: rc_received can
+        // legitimately hold several already-STP-framed TLPs back to back
+        // (queued up faster than this loop drains them), and re-running
+        // whole-queue STP insertion on top of that would stamp one bogus
+        // STP over the whole batch, corrupting the per-TLP framing the
+        // EP-side MAC monitor parser relies on (one STP per TLP).
       //rc_data_scrambling(0);
       //rc_sdp_packet = {SDP[15:0],rc_dllp_packet[0][31:0],rc_dllp_packet[1][31:16]}; 
       //rc_received.push_back(rc_sdp_packet[63:32]);
@@ -2629,10 +2715,10 @@ endtask
     //end
      else if(rc_dllp_fifo.size() > 0) begin
       foreach(rc_dllp_fifo[i]) 
-      `uvm_info("MAC_TX_DRV",$sformatf("RC_DLLP_Received_1 %0h DWORDs ",rc_dllp_fifo[i]),UVM_HIGH)
+      `uvm_info("MAC_TX_DRV",$sformatf("RC_DLLP_Received_1 %0p DWORDs ",rc_dllp_fifo[i]),UVM_HIGH)
         rc_dllp_queue = rc_dllp_fifo.pop_front();
 	 foreach(rc_dllp_queue[i]) 
-      `uvm_info("MAC_TX_DRV",$sformatf("RC_DLLP_Received_1 %0h DWORDs ",rc_dllp_queue[i]),UVM_HIGH)
+      `uvm_info("MAC_TX_DRV",$sformatf("RC_DLLP_Received_1 %0p DWORDs ",rc_dllp_queue[i]),UVM_HIGH)
         rc_size = rc_dllp_queue.size();
 
         for(int i =0;i<rc_size;i++) begin
@@ -2755,11 +2841,15 @@ endtask
          else if(ep_received.size() >0) begin
          
          foreach(ep_received[i])
-        `uvm_info("PIPE_RX_DRV",$sformatf("EP_SCRAMBLED_BEFORE and STP ADDED %0h",ep_received[i]),UVM_HIGH)
+        `uvm_info("PIPE_RX_DRV",$sformatf("EP_SCRAMBLED_BEFORE %0h",ep_received[i]),UVM_HIGH)
 	
-        ep_add_stp_to_all_packets(ep_received);
+        // NOTE: each TLP already carries its own STP - added per-TLP in
+        // write_port_g() before being flattened into this single-dimension
+        // ep_received queue. Do not re-run whole-queue STP insertion here;
+        // ep_received can legitimately hold several already-framed TLPs
+        // back to back.
 	foreach(ep_received[i])
-        `uvm_info("PIPE_RX_DRV",$sformatf("EP_SCRAMBLED and STP ADDED %0h",ep_received[i]),UVM_HIGH)
+        `uvm_info("PIPE_RX_DRV",$sformatf("EP_SCRAMBLED %0h",ep_received[i]),UVM_HIGH)
     //    ep_data_scrambling(0);
       //ep_sdp_packet = {SDP[15:0],ep_dllp_packet[0][31:0],ep_dllp_packet[1][31:16]}; 
       //ep_received.push_back(ep_sdp_packet[63:32]);
@@ -4246,3 +4336,5 @@ endtask
   endtask
 
 endclass
+
+

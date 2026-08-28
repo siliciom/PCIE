@@ -34,21 +34,21 @@ class FC_Manager extends uvm_component;
   localparam int CPLD_TOTAL = 2048;
 
   // [8] => one pool per VC (VC0..VC7)
-  reg [7:0][8] ph_avail;
-  reg [7:0][8] nph_avail;
-  reg [7:0][8] cplh_avail;
+  reg [7:0][7:0] ph_avail;
+  reg [7:0][7:0] nph_avail;
+  reg [7:0][7:0] cplh_avail;
 
-  reg [7:0][12] pd_avail;
-  reg [7:0][12] npd_avail;
-  reg [7:0][12] cpld_avail;
+  reg [7:0][11:0] pd_avail;
+  reg [7:0][11:0] npd_avail;
+  reg [7:0][11:0] cpld_avail;
 
-  reg [7:0][8] ph_return = 0;
-  reg [7:0][8] nph_return = 0;
-  reg [7:0][8] cplh_return = 0;
+  reg [7:0][7:0] ph_return = 0;
+  reg [7:0][7:0] nph_return = 0;
+  reg [7:0][7:0] cplh_return = 0;
 
-  reg [7:0][12] pd_return = 0;
-  reg [7:0][12] npd_return = 0;
-  reg [7:0][12] cpld_return = 0;
+  reg [7:0][11:0] pd_return = 0;
+  reg [7:0][11:0] npd_return = 0;
+  reg [7:0][11:0] cpld_return = 0;
 
 
   function void build_phase(uvm_phase phase);

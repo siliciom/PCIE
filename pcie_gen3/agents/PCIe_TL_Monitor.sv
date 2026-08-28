@@ -357,10 +357,10 @@ end
     r_x.tag    = r_x.tlp_q[2][15:8];
 
      r_x.lower_addr   = r_x.tlp_q[2][6:0];
-    r_x.completer_id = r_x.tlp_q[1][29:14];
-    r_x.compl_status = r_x.tlp_q[1][13:11];
-    r_x.bcm          = r_x.tlp_q[1][10];
-    r_x.byte_count   = r_x.tlp_q[1][9:0];
+    r_x.completer_id = r_x.tlp_q[1][31:16];
+    r_x.compl_status = r_x.tlp_q[1][15:13];
+    r_x.bcm          = r_x.tlp_q[1][12];
+    r_x.byte_count   = r_x.tlp_q[1][11:0];
 
     `uvm_info("TX_TL_MONITOR", $sformatf("[%s] REQ_ID = %0d TAG = %0d BYTE_COUNT=%0d", tag, r_x.req_id, r_x.tag, r_x.byte_count), UVM_HIGH)
 
@@ -397,12 +397,19 @@ end
 
       if(calculated_ecrc == r_x.ECRC) begin
         r_x.ecrc_error   = 1'b0;
-        r_x.compl_status = 3'b000;
         r_x.tlp_q.push_back(r_x.ECRC);
 
         foreach(r_x.tlp_q[i])
           `uvm_info("TX_TL_MONITOR", $sformatf("[%s] TX_TLP[%0d] = %08h @ %0t", tag, i, r_x.tlp_q[i], $time), UVM_LOW)
 
+        // FIX: compl_status==UR is a legal, expected completion
+        // (that's the point of the UR test) - it must still be
+        // forwarded on TX_TL_Send so the scoreboard/subscribers
+        // actually see it, not dropped like a corrupted packet.
+        if(r_x.compl_status == 3'b001)
+          `uvm_error("TX_TL_MONITOR", $sformatf("[%s] UNSUPPORTED_REQ completion received (UR)", tag))
+        if(r_x.compl_status == 3'b100)
+          `uvm_error("TX_TL_MONITOR", $sformatf("[%s] COMPLETER_ABORT completion received (CA)", tag))
         TX_TL_Send.write(r_x);
 
       end else begin
@@ -412,7 +419,12 @@ end
 
     end else begin
       r_x.ecrc_error   = 1'b0;
-      r_x.compl_status = 3'b000;
+      // FIX: this used to force compl_status back to 3'b000 here,
+      // clobbering the real status already parsed from the header
+      // (r_x.compl_status = r_x.tlp_q[1][15:13] above). That hid a
+      // UR completion whenever it arrived without an ECRC (td==0).
+      // compl_status is independent of whether ECRC is present, so
+      // just leave the parsed value alone.
 
       foreach(r_x.tlp_q[i])
         `uvm_info("TX_TL_MONITOR", $sformatf("[%s] TX_TLP[%0d] = %08h @ %0t", tag, i, r_x.tlp_q[i], $time), UVM_LOW)
@@ -422,7 +434,13 @@ end
       // Write method called to send to TL Scoreboard 
       //--------------------------------------------------------------------------
 
-      TX_TL_Send.write(r_x);
+        // FIX: same as above - forward UR completions too instead
+        // of dropping them.
+        if(r_x.compl_status == 3'b001)
+          `uvm_error("TX_TL_MONITOR", $sformatf("[%s] UNSUPPORTED_REQ completion received (UR)", tag))
+        if(r_x.compl_status == 3'b100)
+          `uvm_error("TX_TL_MONITOR", $sformatf("[%s] COMPLETER_ABORT completion received (CA)", tag))
+        TX_TL_Send.write(r_x);
 
       `uvm_info("TL_MON", "Writing completion to analysis port", UVM_LOW)
 
@@ -467,7 +485,9 @@ end
     bit [31:0] dw;
     int header_dw;
     int payload_dw;
+    int actual_payload_dw;
     bit [31:0] calculated_ecrc;
+    bit malformed_length;   // ERR_LENGTH checker result - gates downstream forwarding
 
     ////////////////////////////// HEADER DW0 //////////////////////////////
     do begin
@@ -483,7 +503,24 @@ end
     r_x.r_type = dw[28:24];
     r_x.length = dw[9:0];
     r_x.td     = dw[15];
+    r_x.ep     = dw[14];
     r_x.at     = dw[11:10];
+
+    //-----------------------------------------------------------
+    // ERR_FMT_RTYPE checker (part 1): fmt[2]==1 (3'b1xx) is a
+    // reserved encoding for every basic request/completion Type in
+    // this bench's fmt_e (only 000/001/010/011 - {3,4}DW x {no-,}
+    // data - are ever legally produced). Catches the injection even
+    // when r_type itself is still a normal, otherwise-legal value
+    // (Sequence_item::post_randomize() deliberately leaves r_type
+    // alone under ERR_FMT_RTYPE).
+    //-----------------------------------------------------------
+    if (r_x.fmt[2]) begin
+      `uvm_error("MALFORMED_TLP",
+        $sformatf("[%s] Reserved fmt encoding: fmt=%03b (bit2 set) r_type=%05b - Malformed TLP",
+                   tag, r_x.fmt, r_x.r_type))
+    end
+
    case(r_x.r_type)
       5'b00000 :
         if(r_x.fmt inside {3'b000, 3'b001})
@@ -515,9 +552,29 @@ end
         else if (r_x.fmt==3'b010)
           r_x.e_type = CPL_DATA;
 
+      //-----------------------------------------------------
+      // ERR_FMT_RTYPE checker (part 2): any r_type not covered
+      // above (00001/00011/00110-01001/01011-11111) is a reserved/
+      // illegal Type field per the PCIe TLP header - a Malformed
+      // TLP. Real hardware would treat this as an uncorrectable
+      // Malformed TLP error (Fatal by default severity).
+      //-----------------------------------------------------
+      default : begin
+        `uvm_error("MALFORMED_TLP",
+          $sformatf("[%s] Illegal/reserved fmt+r_type combination: fmt=%03b r_type=%05b - Malformed TLP",
+                     tag, r_x.fmt, r_x.r_type))
+      end
+
     endcase
 
-
+    // ERR_IO_LEN / ERR_CFG_LEN checker: IO and Config reads/writes
+    // are architecturally required to carry Length==1 (a single
+    // DW). Anything else is Malformed.
+    if (r_x.r_type inside {5'b00010, 5'b00100, 5'b00101} && r_x.length != 10'd1) begin
+      `uvm_error("MALFORMED_TLP",
+        $sformatf("[%s] IO/CFG request with Length=%0d (must be 1) - Malformed TLP",
+                   tag, r_x.length))
+    end
 
     // header DW count
     case(r_x.fmt)
@@ -546,6 +603,26 @@ end
     r_x.register_num     = r_x.tlp_q[2][7:2];
     r_x.R4               = r_x.tlp_q[2][1:0];
 
+    //-----------------------------------------------------------
+    // ERR_BYTE_EN checker: first_BE/last_BE must each be one of
+    // the legal contiguous (or all-zero, for Length==1 don't-care)
+    // patterns. A non-contiguous pattern like 4'b0101 is Malformed.
+    //-----------------------------------------------------------
+    if (r_x.e_type inside {MEM_RD, MEM_WR, IO_RD, IO_WR, CFG_RD0, CFG_WR0, CFG_RD1, CFG_WR1}) begin
+      bit first_be_ok, last_be_ok;
+      first_be_ok = r_x.first_BE inside {4'b0000, 4'b0001, 4'b0011, 4'b0111, 4'b1111,
+                                          4'b1000, 4'b1100, 4'b1110};
+      last_be_ok  = r_x.last_BE  inside {4'b0000, 4'b0001, 4'b0011, 4'b0111, 4'b1111,
+                                          4'b1000, 4'b1100, 4'b1110};
+      if (!first_be_ok || !last_be_ok) begin
+        `uvm_error("MALFORMED_TLP",
+          $sformatf("[%s] Illegal byte-enable pattern: first_BE=%04b last_BE=%04b - Malformed TLP",
+                     tag, r_x.first_BE, r_x.last_BE))
+      end
+    end
+
+
+
     `uvm_info("RX_TL_MONITOR", $sformatf("[%s] BYTE_COUNT = %0d REQ_ID = %0d TAG = %0d EP_DEVICE = %0h", tag, r_x.byte_count, r_x.req_id, r_x.tag, r_x.ep_device), UVM_LOW)
     `uvm_info("MON",
 $sformatf("MON: reg_num=%0d ext_reg=%0d",
@@ -560,18 +637,60 @@ end
 
     ////////////////////////////// PAYLOAD //////////////////////////////
     payload_dw = r_x.length;
+ `uvm_info("TLP_length",
+        $sformatf("[%s] ERR_LENGTH: Expected payload = %0d DW, Captured payload = %0d DW, Missing = %0d DW - Malformed TLP",
+                   tag, payload_dw, actual_payload_dw, payload_dw - actual_payload_dw),UVM_LOW)
 
     if(r_x.fmt inside {3'b010, 3'b011}) begin
       r_x.payload = new[payload_dw];
       for(int i = 0; i < payload_dw; i++) begin
-        do begin
-          @(posedge RX_TL_DL.CLK);
-        end while(!(RX_TL_DL.tl_rx_valid && RX_TL_DL.tl_rx_ready));
-        dw = RX_TL_DL.tl_rx_data;
-        r_x.payload[i] = dw;
-        r_x.tlp_q.push_back(dw);
+        //-------------------------------------------------------------
+        // Check exactly one clock for payload DW #i - no waiting/
+        // retrying. If valid&&ready isn't there on this very edge,
+        // the sender has stopped sending early (as seen in the log:
+        // header promised 12 DW, only 9 ever arrived) - break out
+        // immediately instead of blocking. This lets actual_payload_dw
+        // reflect the true captured count and lets the ERR_LENGTH /
+        // malformed_length checker below actually run and drop the
+        // packet, instead of the thread hanging forever.
+        //-------------------------------------------------------------
+        @(posedge RX_TL_DL.CLK);
+        if (RX_TL_DL.tl_rx_valid && RX_TL_DL.tl_rx_ready) begin
+          dw = RX_TL_DL.tl_rx_data;
+          r_x.payload[i] = dw;
+          r_x.tlp_q.push_back(dw);
+          actual_payload_dw++;
+        end else begin
+          `uvm_info("TLP_length",
+            $sformatf("[%s] Payload DW #%0d not present - stopping early after %0d/%0d DW captured",
+                       tag, i, actual_payload_dw, payload_dw), UVM_LOW)
+          break;
+        end
       end
     end
+
+    `uvm_info("TLP_length",
+        $sformatf("[%s] ERR_LENGTH: Expected payload = %0d DW, Captured payload = %0d DW, Missing = %0d DW - Malformed TLP",
+                   tag, payload_dw, actual_payload_dw, payload_dw - actual_payload_dw),UVM_LOW)
+
+    //-----------------------------------------------------------
+    // ERR_LENGTH checker: Length field in the header must match
+    // the number of payload DWs actually captured on the bus.
+    // This is latched into malformed_length and used below to
+    // DROP the packet before it reaches RX_PCIe_LUT / the
+    // scoreboard - previously the uvm_error was raised here but
+    // the packet was still written downstream, so a length-
+    // mismatched (malformed) TLP could still be silently scored
+    // as a PASS by the scoreboard.
+    //-----------------------------------------------------------
+    malformed_length = (r_x.fmt inside {3'b010, 3'b011}) && (actual_payload_dw != payload_dw);
+
+    if (malformed_length) begin
+      `uvm_error("MALFORMED_TLP",
+        $sformatf("[%s] ERR_LENGTH: Expected payload = %0d DW, Captured payload = %0d DW, Missing = %0d DW - Malformed TLP - PACKET DROPPED, not forwarded to LUT/Scoreboard",
+                   tag, payload_dw, actual_payload_dw, payload_dw - actual_payload_dw))
+    end
+
 
     ////////////////////////////// ECRC CHECK //////////////////////////////
     if(r_x.td) begin
@@ -592,6 +711,11 @@ end
 
         foreach(r_x.tlp_q[i])
           `uvm_info("RX_TL_MONITOR", $sformatf("[%s] RX_TLP[%0d] = %08h @ %0t", tag, i, r_x.tlp_q[i], $time), UVM_LOW)
+ if(r_x.ep ==1)
+        `uvm_error("RX_TL_MONITOR", $sformatf("[%s] POISONED TLP - PACKET DROPPED", tag))
+      else if(malformed_length)
+        `uvm_error("RX_TL_MONITOR", $sformatf("[%s] MALFORMED TLP (length mismatch) - PACKET DROPPED", tag))
+      else begin
 
         RX_TL_Send.write(r_x);
 	`uvm_info("MON_TO_LUT",
@@ -601,7 +725,9 @@ $sformatf("Sending to LUT: reg=%0d tag=%0d",
 UVM_NONE)
         RX_TL_MON_Send.write(r_x);
 
-      end else begin
+      end 
+      end 
+      else begin
         r_x.ecrc_error = 1'b1;
         `uvm_error("RX_TL_MONITOR", $sformatf("[%s] ECRC MISMATCH - PACKET DROPPED", tag))
       end
@@ -609,12 +735,17 @@ UVM_NONE)
     end else begin
       r_x.ecrc_error   = 1'b0;
       r_x.compl_status = 3'b000;
-
+      if(r_x.ep ==1)
+        `uvm_error("RX_TL_MONITOR", $sformatf("[%s] POISONED TLP - PACKET DROPPED", tag))
+      else if(malformed_length)
+        `uvm_error("RX_TL_MONITOR", $sformatf("[%s] MALFORMED TLP (length mismatch) - PACKET DROPPED", tag))
+      else begin
       foreach(r_x.tlp_q[i])
         `uvm_info("RX_TL_MONITOR", $sformatf("[%s] RX_TLP[%0d] = %08h @ %0t", tag, i, r_x.tlp_q[i], $time), UVM_LOW)
 
       RX_TL_Send.write(r_x);
       RX_TL_MON_Send.write(r_x);
+      end
           end
 
     wait(RX_TL_DL.tl_rx_valid == 0);
@@ -696,10 +827,10 @@ UVM_NONE)
  t_x.req_id       = t_x.tlp_q[2][31:16];
     t_x.tag          = t_x.tlp_q[2][15:8];
     t_x.lower_addr   = t_x.tlp_q[2][6:0];
-    t_x.completer_id = t_x.tlp_q[1][29:14];
-    t_x.compl_status = t_x.tlp_q[1][13:11];
-    t_x.bcm          = t_x.tlp_q[1][10];
-    t_x.byte_count   = t_x.tlp_q[1][9:0];
+    t_x.completer_id = t_x.tlp_q[1][31:16];
+    t_x.compl_status = t_x.tlp_q[1][15:13];
+    t_x.bcm          = t_x.tlp_q[1][12];
+    t_x.byte_count   = t_x.tlp_q[1][11:0];
 
     ////////////////////////////// PAYLOAD //////////////////////////////
     payload_length = t_x.length;
@@ -736,5 +867,3 @@ UVM_NONE)
   endtask : ep_sending_rx_completion
 
 endclass : PCIe_TL_Monitor
-
-

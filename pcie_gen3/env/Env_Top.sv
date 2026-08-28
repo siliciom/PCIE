@@ -22,13 +22,13 @@ class Env_Top extends uvm_env;
   
   FC_Manager FC_mgr;
  
-  agent_apb_master                         Apb_Master_Agnt;
-  apb_slv_agent                            Apb_Slave_Agnt;    
+//  agent_apb_master                         Apb_Master_Agnt;
+//  apb_slv_agent                            Apb_Slave_Agnt;    
   PCIe_Cfg_Space_Model                     cfg_model;           
-  pcie_type0_cfg_reg_block                 Ral;
+//  pcie_type0_cfg_reg_block                 Ral;
 //  pcie_type1_cfg_reg_block                 Ral_type1;
-  apb_reg_adapter                          Reg2Apb;
-  uvm_reg_predictor #(seq_item_apb_master) Apb_Predictor;
+//  apb_reg_adapter                          Reg2Apb;
+//  uvm_reg_predictor #(seq_item_apb_master) Apb_Predictor;
  // uvm_reg_predictor #(seq_item_apb_master) Apb_Predictor1;
 
  
@@ -61,6 +61,15 @@ class Env_Top extends uvm_env;
 
 cfg_model = PCIe_Cfg_Space_Model::type_id::create("cfg_model");
 cfg_model.init();
+
+cfg_model.configure_bar(0, .is_io(0), .is_64bit(0), .size_mask(32'hFFF0_0000));
+cfg_model.configure_bar(1, .is_io(0), .is_64bit(1), .size_mask(32'hE000_0000));
+cfg_model.configure_bar(2, .is_io(0), .is_64bit(0), .size_mask(32'hFFFF_FFFF));
+cfg_model.configure_bar(3, .is_io(1), .is_64bit(0), .size_mask(32'hFFFF_FF00));
+
+`uvm_info("Env_Top", $sformatf("After init: cfg[0]=%08h cfg[BAR0]=%08h", cfg_model.read_reg(10'h0), cfg_model.read_reg(10'h4)), UVM_NONE)
+
+
 uvm_config_db#(PCIe_Cfg_Space_Model)::set(this, "*", "cfg_model", cfg_model);
  if (!uvm_config_db#(PCIe_MAC_Scoreboard)::get(this, "", "mac_scb", mac_scb))
       `uvm_fatal("Env_Top",
@@ -87,15 +96,15 @@ Vc_Arb     = VC_Arbiter::type_id::create("Vc_Arb", this);
     //  a reg model, mirror this same block under an RC_MODE check.)
     if (cfg.mode == EP_MODE) begin
       uvm_config_db#(uvm_active_passive_enum)::set(this, "Apb_Master_Agnt", "is_active", UVM_ACTIVE);
-      Apb_Master_Agnt = agent_apb_master::type_id::create("Apb_Master_Agnt", this);
+  //    Apb_Master_Agnt = agent_apb_master::type_id::create("Apb_Master_Agnt", this);
 
-       Apb_Slave_Agnt = apb_slv_agent::type_id::create("Apb_Slave_Agnt", this);   // ← add this line
+  //     Apb_Slave_Agnt = apb_slv_agent::type_id::create("Apb_Slave_Agnt", this);   // ← add this line
 
-      Ral = pcie_type0_cfg_reg_block::type_id::create("Ral");
-      Ral.build();
-      Ral.lock_model();
-      Reg2Apb = apb_reg_adapter::type_id::create("Reg2Apb");
-      Apb_Predictor = uvm_reg_predictor#(seq_item_apb_master)::type_id::create("Apb_Predictor", this);
+    //  Ral = pcie_type0_cfg_reg_block::type_id::create("Ral");
+    //  Ral.build();
+    //  Ral.lock_model();
+    //  Reg2Apb = apb_reg_adapter::type_id::create("Reg2Apb");
+    //  Apb_Predictor = uvm_reg_predictor#(seq_item_apb_master)::type_id::create("Apb_Predictor", this);
 
      //  Ral_type1 =  pcie_type1_cfg_reg_block::type_id::create("Ral_type1");
      //  Ral_type1.build();
@@ -138,10 +147,10 @@ PCIe_DLL_Agnt.PCIe_DLL_Mon.rc_dllp_tx.connect(DL_Scb.rc_dllp_tx_imp);
 
 
        // ---- ADDED: RAL <-> APB agent wiring ----
-      Ral.default_map.set_sequencer(Apb_Master_Agnt.sequencer, Reg2Apb);
-      Apb_Predictor.map     = Ral.default_map;
-      Apb_Predictor.adapter = Reg2Apb;
-      Apb_Master_Agnt.monitor.item_port.connect(Apb_Predictor.bus_in);
+     // Ral.default_map.set_sequencer(Apb_Master_Agnt.sequencer, Reg2Apb);
+     // Apb_Predictor.map     = Ral.default_map;
+     // Apb_Predictor.adapter = Reg2Apb;
+     // Apb_Master_Agnt.monitor.item_port.connect(Apb_Predictor.bus_in);
 
      // Ral_type1.default_map.set_sequencer(Apb_Master_Agnt.sequencer, Reg2Apb);
    //   Apb_Predictor1.adapter = Reg2Apb;
@@ -151,7 +160,7 @@ PCIe_DLL_Agnt.PCIe_DLL_Mon.rc_dllp_tx.connect(DL_Scb.rc_dllp_tx_imp);
        end
 
   endfunction : connect_phase
-
+/*
   task run_phase(uvm_phase phase);
   without_wait_state slv_seq;
   if (cfg.mode == EP_MODE) begin
@@ -164,7 +173,7 @@ PCIe_DLL_Agnt.PCIe_DLL_Mon.rc_dllp_tx.connect(DL_Scb.rc_dllp_tx_imp);
     join_none
   end
 endtask : run_phase
-
+*/
 
 
 endclass : Env_Top

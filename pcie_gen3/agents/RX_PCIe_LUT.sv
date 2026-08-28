@@ -51,6 +51,15 @@ class RX_PCIe_LUT extends uvm_component;
   bit [31:0] bar[6];
   bit bar_is_64[6];  
 
+  // Local mirror of the configure_bar() calls made in build_phase -
+  // needed here (not just inside cfg_model) so is_addr_supported()
+  // can decode base+size for the ERR_UNSUPPORTED_REQ checker
+  // without adding new accessors to PCIe_Cfg_Space_Model.
+  bit        bar_used[6];
+  bit        bar_cfg_is_io[6];
+  bit        bar_cfg_is_64[6];
+  bit [31:0] bar_cfg_mask[6];
+
   `uvm_component_utils(RX_PCIe_LUT)
 
   function new(string name="PCIe_LUT", uvm_component parent=null);
@@ -75,17 +84,89 @@ class RX_PCIe_LUT extends uvm_component;
       if(!uvm_config_db #(FC_Manager)::get(this, "", "fc_mgr", fc_mgr))
         `uvm_fatal("RX_PCIe_LUT", "Cannot get FC_Manager")
 
-      cfg_model = PCIe_Cfg_Space_Model::type_id::create("cfg_model");
-      cfg_model.init();
+     if(!uvm_config_db #(PCIe_Cfg_Space_Model)::get(this, "", "cfg_model", cfg_model))
+        `uvm_fatal("RX_PCIe_LUT", "Cannot get shared PCIe_Cfg_Space_Model (cfg_model) from Env_Top")
 
-      cfg_model.configure_bar(0, .is_io(0), .is_64bit(0), .size_mask(32'hFFF0_0000));
-      cfg_model.configure_bar(1, .is_io(0), .is_64bit(1), .size_mask(32'hE000_0000));
-      cfg_model.configure_bar(2, .is_io(0), .is_64bit(0), .size_mask(32'hFFFF_FFFF));
-      cfg_model.configure_bar(3, .is_io(1), .is_64bit(0), .size_mask(32'hFFFF_FF00));
+      `uvm_info("RX_PCIe_LUT", $sformatf("Using shared cfg_model: cfg[0]=%08h cfg[BAR0]=%08h", cfg_model.read_reg(10'h0), cfg_model.read_reg(10'h4)), UVM_NONE)
+      
+
+            // Mirror the same 4 configure_bar() calls locally so
+      // is_addr_supported() below can decode base/size per-BAR.
+      bar_used[0] = 1; bar_cfg_is_io[0] = 0; bar_cfg_is_64[0] = 0; bar_cfg_mask[0] = 32'hFFF0_0000;
+      bar_used[1] = 1; bar_cfg_is_io[1] = 0; bar_cfg_is_64[1] = 1; bar_cfg_mask[1] = 32'hE000_0000;
+      bar_used[2] = 0; // BAR2 is the high DW of the BAR1/2 64-bit pair - not independently decoded
+      bar_used[3] = 1; bar_cfg_is_io[3] = 1; bar_cfg_is_64[3] = 0; bar_cfg_mask[3] = 32'hFFFF_FF00;
+      bar_used[4] = 0;
+      bar_used[5] = 0;
 
       `uvm_info("INIT", $sformatf("After init: cfg[0]=%08h cfg[BAR0]=%08h", cfg_model.read_reg(10'h0), cfg_model.read_reg(10'h4)), UVM_NONE)  
 
     endfunction
+
+  //-----------------------------------------------------------
+  // is_addr_supported()
+  //   ERR_UNSUPPORTED_REQ checker: walks every implemented,
+  //   currently-programmed BAR and reports whether `addr` (mem or
+  //   IO, per is_io) falls inside any of them. Real hardware would
+  //   simply not claim the transaction; here we use it to decide
+  //   UR vs a normal completion / silently drop a posted write.
+  //-----------------------------------------------------------
+  function automatic bit is_addr_supported(bit [63:0] addr, bit is_io);
+    for (int b = 0; b < 6; b++) begin
+      bit [63:0] base, size;
+      bit [31:0] raw_lo, raw_hi;
+
+      if (!bar_used[b] || bar_cfg_is_io[b] != is_io)
+        continue;
+
+      raw_lo = cfg_model.read_reg(4 + b);
+      size   = {32'h0, (~bar_cfg_mask[b]) + 32'h1};
+
+      if (bar_cfg_is_io[b]) begin
+        base = {32'h0, raw_lo & bar_cfg_mask[b]};
+      end
+      else if (bar_cfg_is_64[b] && (b < 5)) begin
+        raw_hi = cfg_model.read_reg(4 + b + 1);
+        base   = {raw_hi, raw_lo & bar_cfg_mask[b]};
+      end
+      else begin
+        base = {32'h0, raw_lo & bar_cfg_mask[b]};
+      end
+
+      if (size == 0)
+        continue;   // BAR not sized/programmed
+
+      if (addr >= base && addr < (base + size))
+        return 1;
+    end
+    return 0;
+  endfunction
+
+  //-----------------------------------------------------------
+  // is_ca_trigger_addr()
+  //   ERR_COMPLETER_ABORT checker: BAR0 is otherwise a perfectly
+  //   valid, claimed range, but this one offset inside it is
+  //   reserved to model a completer-side internal failure (e.g. a
+  //   parity/ECC error on the backing storage, a locked internal
+  //   register, etc.) - the request IS accepted by the completer
+  //   (unlike UR, which never claims the address at all), but the
+  //   completer cannot service it, so it must abort with CA
+  //   (3'b100) instead of returning data.
+  //-----------------------------------------------------------
+  localparam bit [63:0] CA_TRIGGER_OFFSET = 64'hC0;
+
+  function automatic bit is_ca_trigger_addr(bit [63:0] addr);
+    bit [63:0] base;
+    bit [31:0] raw_lo;
+
+    if (!bar_used[0] || bar_cfg_is_io[0])
+      return 0;
+
+    raw_lo = cfg_model.read_reg(4 + 0);
+    base   = {32'h0, raw_lo & bar_cfg_mask[0]};
+
+    return (addr == (base + CA_TRIGGER_OFFSET));
+  endfunction
 
   task run_phase(uvm_phase phase);
 
@@ -120,20 +201,34 @@ class RX_PCIe_LUT extends uvm_component;
         bit [3:0] be;
         bit [31:0] old_word;
 
-        foreach(req.payload[i]) begin
-          if(req.length == 1)      be = req.first_BE;
-          else if(i == 0)          be = req.first_BE;
-          else if(i == req.length-1) be = req.last_BE;
-          else                     be = 4'b1111;
+        // ERR_UNSUPPORTED_REQ checker: posted write to an
+        // address no implemented BAR claims - a real completer
+        // drops it silently on the wire (no completion for a
+        // posted request), but must never apply it to memory.
+        // FIX: is_addr_supported() was never actually called here,
+        // so a write to an unclaimed address was silently applied
+        // to mem_space anyway. Also removed the duplicate
+        // calc_required_credit/return_credit call that ran twice
+        // for the same TLP.
+        fc_mgr.calc_required_credit(req, hdr_credit, data_credit);
+        fc_mgr.return_credit(req.vc, req.pkt_type, hdr_credit, data_credit);
 
-          old_word = mem_space[req.addr + (i*4)];
-          mem_space[req.addr + (i*4)] = apply_be(old_word, req.payload[i], be);
+        if (!is_addr_supported(req.addr, 0)) begin
+          `uvm_info("RX_PCIe_LUT",
+            $sformatf("MEM_WR to unsupported addr=%0h - UR, posted write dropped (no completion)",
+                       req.addr), UVM_LOW)
+        end
+        else begin
+          foreach(req.payload[i]) begin
+            if(req.length == 1)      be = req.first_BE;
+            else if(i == 0)          be = req.first_BE;
+            else if(i == req.length-1) be = req.last_BE;
+            else                     be = 4'b1111;
 
-         end
-
-	 fc_mgr.calc_required_credit(req, hdr_credit, data_credit);
-         fc_mgr.return_credit(req.vc, req.pkt_type, hdr_credit, data_credit);
-
+            old_word = mem_space[req.addr + (i*4)];
+            mem_space[req.addr + (i*4)] = apply_be(old_word, req.payload[i], be);
+          end
+        end
       end
 
       else if(is_io_wr) begin
@@ -146,6 +241,26 @@ class RX_PCIe_LUT extends uvm_component;
       end
 
       else if(is_mem_rd) begin
+         // ERR_UNSUPPORTED_REQ checker: a non-posted request
+         // (MEM_RD) to an address no BAR claims must come back as
+         // Unsupported Request (compl_status = 3'b001), not data.
+         if (!is_addr_supported(req.addr, 0)) begin
+		 `uvm_info("RX_PCIe_LUT",
+            $sformatf("MEM_WR to unsupported addr=%0h - UR, posted write dropped (no completion)",
+                       req.addr), UVM_LOW)
+
+           req.compl_status = 3'b001;   // Unsupported Request
+         end
+         // ERR_COMPLETER_ABORT checker: address IS claimed by BAR0,
+         // but this offset models an internal completer-side
+         // failure servicing an otherwise-legal request.
+         else if (is_ca_trigger_addr(req.addr)) begin
+           `uvm_info("RX_PCIe_LUT",
+            $sformatf("MEM_RD to addr=%0h hit completer-side failure trap - CA",
+                       req.addr), UVM_LOW)
+
+           req.compl_status = 3'b100;   // Completer Abort
+         end
          generate_mem_cpl(req);
          tag_mgr.free_tag(req.tag);
 	 fc_mgr.calc_required_credit(req, hdr_credit, data_credit);
@@ -294,7 +409,7 @@ class RX_PCIe_LUT extends uvm_component;
     cpl.r_type = 5'b01010;
 
     cpl.completer_id = 16'h0100;
-    cpl.compl_status = req.compl_status;
+    cpl.compl_status = 3'b000;
     cpl.bcm          = 0;
     cpl.byte_count   = 0;
     cpl.req_id       = req.req_id;
@@ -318,7 +433,7 @@ class RX_PCIe_LUT extends uvm_component;
     cpl.r_type = 5'b01010;
 
     cpl.completer_id = 16'h0100;
-    cpl.compl_status = req.compl_status;
+    cpl.compl_status = 3'b000;
     cpl.bcm          = req.bcm;
     cpl.byte_count   = 4;
     cpl.req_id       = req.req_id;
@@ -348,7 +463,7 @@ class RX_PCIe_LUT extends uvm_component;
 
     cpl.e_type        = CPL_DATA;
     cpl.completer_id  = 16'h0100;
-    cpl.compl_status  = req.compl_status;
+    cpl.compl_status  = 3'b000;
     cpl.bcm           = req.bcm;
     cpl.byte_count    = 4;
     cpl.req_id        = req.req_id;
@@ -434,6 +549,3 @@ endfunction
   endfunction : apply_be
     
 endclass : RX_PCIe_LUT
-
-
-

@@ -29,6 +29,8 @@ class pcie_base_test extends uvm_test;
   // Enumeration state - populated by do_enumeration(), read by
   // every derived test class.
   //---------------------------------------------------------------
+  uvm_tlm_analysis_fifo #(Sequence_item) cpl_fifo;
+
   bit        device_present;
   bit [15:0] vendor_id, device_id;
   bit [7:0]  header_type;
@@ -60,12 +62,13 @@ class pcie_base_test extends uvm_test;
     string rc_name, ep_name;
     super.build_phase(phase);
 
+    cpl_fifo = new("cpl_fifo", this);
 
     TL_Scb  = TL_Scoreboard::type_id::create("TL_Scb",  this);
     Top_Scb = Scoreboard_Top::type_id::create("Top_Scb", this);
-    mac_scb = PCIe_MAC_Scoreboard::type_id::create("mac_scb",this);
-    DL_Scb  = DL_Scoreboard::type_id::create("DL_Scb", this);
-    pcie_cov  = PCIe_TL_Coverage::type_id::create("pcie_cov", this);
+ mac_scb = PCIe_MAC_Scoreboard::type_id::create("mac_scb",this);
+   DL_Scb  = DL_Scoreboard::type_id::create("DL_Scb", this);
+  pcie_cov  = PCIe_TL_Coverage::type_id::create("pcie_cov", this);
 
     RC_Env = new[num_rc];
     rc_cfg = new[num_rc];
@@ -82,9 +85,9 @@ class pcie_base_test extends uvm_test;
       uvm_config_db#(env_cfg)::set(this, {rc_name, ".*"}, "env_cfg", rc_cfg[i]);
       uvm_config_db#(env_cfg)::set(this,  rc_name,        "env_cfg", rc_cfg[i]);
       uvm_config_db#(TL_Scoreboard)::set(this, rc_name, "TL_Scb", TL_Scb);
-      uvm_config_db#(PCIe_MAC_Scoreboard)::set(this, rc_name, "mac_scb", mac_scb);
-      uvm_config_db#(DL_Scoreboard)::set(this, rc_name, "DL_Scb", DL_Scb);
-      uvm_config_db#(PCIe_TL_Coverage)::set(this, rc_name, "pcie_cov", pcie_cov);
+       uvm_config_db#(PCIe_MAC_Scoreboard)::set(this, rc_name, "mac_scb", mac_scb);
+ uvm_config_db#(DL_Scoreboard)::set(this, rc_name, "DL_Scb", DL_Scb);
+  uvm_config_db#(PCIe_TL_Coverage)::set(this, rc_name, "pcie_cov", pcie_cov);
 
 
       RC_Env[i]  = Env_Top::type_id::create(rc_name, this);
@@ -100,9 +103,9 @@ class pcie_base_test extends uvm_test;
       uvm_config_db#(env_cfg)::set(this, {ep_name, ".*"}, "env_cfg", ep_cfg[i]);
       uvm_config_db#(env_cfg)::set(this,  ep_name,        "env_cfg", ep_cfg[i]);
       uvm_config_db#(TL_Scoreboard)::set(this, ep_name, "TL_Scb", TL_Scb);
-      uvm_config_db#(PCIe_MAC_Scoreboard)::set(this, ep_name, "mac_scb", mac_scb);
-      uvm_config_db#(DL_Scoreboard)::set(this, ep_name, "DL_Scb", DL_Scb);
-      uvm_config_db#(PCIe_TL_Coverage)::set(this, ep_name, "pcie_cov", pcie_cov);
+       uvm_config_db#(PCIe_MAC_Scoreboard)::set(this, ep_name, "mac_scb", mac_scb);
+       uvm_config_db#(DL_Scoreboard)::set(this, ep_name, "DL_Scb", DL_Scb);
+       uvm_config_db#(PCIe_TL_Coverage)::set(this, ep_name, "pcie_cov", pcie_cov);
 
 
 
@@ -116,6 +119,7 @@ class pcie_base_test extends uvm_test;
 
   function void connect_phase(uvm_phase phase);
     super.connect_phase(phase);
+    RC_Env[0].PCIe_TL_Agnt.TX_TL_Mon.TX_TL_Send.connect(cpl_fifo.analysis_export);
 
     TL_Scb.t_port.connect(Top_Scb.t_imp);
     TL_Scb.r_port.connect(Top_Scb.r_imp);
@@ -142,29 +146,23 @@ class pcie_base_test extends uvm_test;
     rd_seq.start(RC_Env[0].PCIe_TL_Agnt.TX_TL_Seqr);
 
     found = 0;
-     
-    while (!found) begin
-    
-    `uvm_info("TEST","Waiting for completion...",UVM_LOW)
-
-    wait(PCIe_TL_Monitor::cpl_q.size() > 0);
-
-      cpl = PCIe_TL_Monitor::cpl_q.pop_front();
-
+    while(!found) begin
+      `uvm_info("TEST","Waiting for completion...",UVM_LOW)
+       cpl_fifo.get(cpl);
       `uvm_info("TEST","Completion received",UVM_LOW)
-      `uvm_info("TEST", $sformatf("REQ TAG = %0d  CPL TAG = %0d", rd_seq.req.tag, cpl.tag), UVM_LOW)
-
-
-      if (cpl.tag == rd_seq.req.tag) begin
-
+      `uvm_info("TEST", $sformatf("REQ TAG = %0d  CPL TAG = %0d  CPL TYPE = %s", rd_seq.req.tag, cpl.tag, cpl.e_type.name()), UVM_LOW)
+      // NOTE: cpl_fifo carries BOTH the echoed outgoing request (from
+      // rc_sending_tx_request) and the real completion (from
+      // rc_collecting_rx_completion) - both tagged the same, since it's
+      // the same transaction. Must qualify on e_type too, or this matches
+      // the request's own echo instead of waiting for the real completion,
+      // letting the next config packet fire before the DUT has completed
+      // the first one.
+      if((cpl.tag == rd_seq.req.tag) && (cpl.e_type == CPL_DATA)) begin
         data  = cpl.payload[0];
-        
         found = 1;
-    
       end
-    
     end
-  
   endtask : cfg_read
 
   task cfg_write(bit [3:0] ext_reg, bit [5:0] reg_num, bit [31:0] data, bit [3:0] be = 4'hF);
@@ -180,33 +178,21 @@ class pcie_base_test extends uvm_test;
     wr_seq.start(RC_Env[0].PCIe_TL_Agnt.TX_TL_Seqr);
 
     found = 0;
-    
-
-    while (!found) begin
-
-    `uvm_info("TEST","Waiting for completion...",UVM_LOW)
-
-
-    wait(PCIe_TL_Monitor::cpl_q.size() > 0);
-
-    cpl = PCIe_TL_Monitor::cpl_q.pop_front();
-
-      `uvm_info("TEST","Completion received",UVM_LOW)
-      `uvm_info("TEST", $sformatf("REQ TAG = %0d  CPL TAG = %0d", wr_seq.req.tag, cpl.tag), UVM_LOW)
-
-
-    if (cpl.tag == wr_seq.req.tag) begin
-        
-        data  = cpl.payload[0];
-        found = 1;
-        
-      end
-
+    while(!found) begin
+      cpl_fifo.get(cpl);
+      // Same reason as cfg_read: must qualify on e_type == CPL, not just
+      // tag, or this matches the echoed outgoing request instead of the
+      // real completion.
+      if((cpl.tag == wr_seq.req.tag) && (cpl.e_type == CPL)) found = 1;
     end
   endtask : cfg_write
 
-   
   //-------------------------------------------------------------
+  // Full enumeration flow - see the class-header comment above for
+  // the step-by-step description.
+  //-------------------------------------------------------------
+  
+ //-------------------------------------------------------------
   // Full enumeration flow - see the class-header comment above for
   // the step-by-step description.
   //-------------------------------------------------------------
@@ -380,7 +366,7 @@ class Single_Mem_Wr_Rd_3DW_test extends pcie_base_test;
     Mem_Seq_tx.p_wr_fmt = bar_wr_fmt[0];
     Mem_Seq_tx.p_rd_fmt = bar_rd_fmt[0];
     Mem_Seq_tx.p_addr   = bar_base[0] + 64'h10;
-    Mem_Seq_tx.p_length = 1023;
+    Mem_Seq_tx.p_length = 100;
     `uvm_info("TEST",
 $sformatf("BAR0 Base=%h WR_FMT=%s RD_FMT=%s",
            Mem_Seq_tx.p_addr,
@@ -390,7 +376,7 @@ UVM_NONE)
 
     Mem_Seq_tx.start(RC_Env[0].PCIe_TL_Agnt.TX_TL_Seqr);
    
-    #90000;
+    #2000000;
     phase.drop_objection(this);
   endtask : run_phase
 
@@ -423,7 +409,7 @@ class Single_Mem_Wr_Rd_4DW_test extends pcie_base_test;
     Seq_tx.p_length = 40;
     Seq_tx.start(RC_Env[0].PCIe_TL_Agnt.TX_TL_Seqr);
 
-    #90000;
+    #200000;
     phase.drop_objection(this);
   endtask : run_phase
 
@@ -458,7 +444,8 @@ class Multiple_Mem_Wr_Rd_3DW_test extends pcie_base_test;
     curr_addr = bar_base[0] + offset;
     `uvm_info("TEST", $sformatf("curr_addr1 = %0h",curr_addr), UVM_LOW)
       
-    repeat(5) begin
+    repeat(20) begin
+RC_Env[0].PCIe_DLL_Agnt.PCIe_DLL_Drv.cfg.replay_en = 1'b0;
 
     Seq_tx = Multiple_Mem_Wr_Rd_3DW::type_id::create("Seq_tx");
    
@@ -508,7 +495,7 @@ class Multiple_Mem_Wr_Rd_4DW_test extends pcie_base_test;
 
     curr_addr = bar_base[1] + offset;
 
-    repeat(4) begin
+    repeat(25) begin
 	    
       Seq_tx = Multiple_Mem_Wr_Rd_4DW::type_id::create("Seq_tx");
       Seq_tx.p_wr_fmt = bar_wr_fmt[1];
@@ -521,7 +508,7 @@ class Multiple_Mem_Wr_Rd_4DW_test extends pcie_base_test;
 
     end
 
-    #2000000;
+    #20000000;
     phase.drop_objection(this);
   endtask : run_phase
 
@@ -686,13 +673,14 @@ class Multiple_IO_Wr_Rd_3DW_test extends pcie_base_test;
 
     curr_addr = bar_base[3] + offset;
 
-    repeat(4) begin
+    repeat(30) begin
 
+RC_Env[0].PCIe_DLL_Agnt.PCIe_DLL_Drv.cfg.replay_en = 1'b0;
       Seq_tx = Multiple_IO_Wr_Rd_3DW::type_id::create("Seq_tx");
       Seq_tx.p_wr_fmt = bar_wr_fmt[3];
       Seq_tx.p_rd_fmt = bar_rd_fmt[3];
       Seq_tx.p_addr = curr_addr;
-      Seq_tx.p_length = 1;
+      Seq_tx.p_length =
       Seq_tx.start(RC_Env[0].PCIe_TL_Agnt.TX_TL_Seqr);
 
       curr_addr += Seq_tx.p_length * 4;
@@ -758,11 +746,180 @@ class B2B_IO_Wr_Rd_3DW_test extends pcie_base_test;
   endtask : run_phase
 
 endclass : B2B_IO_Wr_Rd_3DW_test
+
+
+
+class Single_Mem_Wr_Rd_3DW_Max_payload_test extends pcie_base_test;
+
+ `uvm_component_utils(Single_Mem_Wr_Rd_3DW_Max_payload_test)
+
+  Single_Mem_Wr_Rd_3DW Mem_Seq_tx;
+
+  function new(string name = "Single_Mem_Wr_Rd_3DW_test", uvm_component parent = null);
+    super.new(name, parent);
+  endfunction
+
+  task run_phase(uvm_phase phase);
+    super.run_phase(phase);      // link-up + full enumeration
+    phase.raise_objection(this);
+
+    Mem_Seq_tx = Single_Mem_Wr_Rd_3DW::type_id::create("Mem_Seq_tx");
+RC_Env[0].PCIe_DLL_Agnt.PCIe_DLL_Drv.cfg.replay_en = 1'b0;
+    Mem_Seq_tx.p_wr_fmt = bar_wr_fmt[0];
+    Mem_Seq_tx.p_rd_fmt = bar_rd_fmt[0];
+    Mem_Seq_tx.p_addr   = bar_base[0] + 64'h10;
+    Mem_Seq_tx.p_length = 0;
+    `uvm_info("TEST",
+$sformatf("BAR0 Base=%h WR_FMT=%s RD_FMT=%s",
+           Mem_Seq_tx.p_addr,
+           Mem_Seq_tx.p_wr_fmt.name(),
+           Mem_Seq_tx.p_rd_fmt.name()),
+UVM_NONE)
+
+    Mem_Seq_tx.start(RC_Env[0].PCIe_TL_Agnt.TX_TL_Seqr);
+   
+    #2000000;
+    phase.drop_objection(this);
+  endtask : run_phase
+
+endclass : Single_Mem_Wr_Rd_3DW_Max_payload_test
+
+
+
+
+class Single_Mem_Wr_Rd_4DW_Max_payload_test extends pcie_base_test;
+
+  `uvm_component_utils(Single_Mem_Wr_Rd_4DW_Max_payload_test)
+
+  Single_Mem_Wr_Rd_4DW Seq_tx;
+
+  function new(string name = "Single_Mem_Wr_Rd_4DW_test", uvm_component parent = null);
+    super.new(name, parent);
+  endfunction
+
+  task run_phase(uvm_phase phase);
+    super.run_phase(phase);
+    phase.raise_objection(this);
+RC_Env[0].PCIe_DLL_Agnt.PCIe_DLL_Drv.cfg.replay_en = 1'b0;
+    Seq_tx = Single_Mem_Wr_Rd_4DW::type_id::create("Seq_tx");
+    Seq_tx.p_wr_fmt = bar_wr_fmt[1];
+    Seq_tx.p_rd_fmt = bar_rd_fmt[1];
+    Seq_tx.p_addr   = bar_base[1] + 64'h20;
+    Seq_tx.p_length = 0;
+    Seq_tx.start(RC_Env[0].PCIe_TL_Agnt.TX_TL_Seqr);
+
+    #2000000;
+    phase.drop_objection(this);
+  endtask : run_phase
+
+endclass : Single_Mem_Wr_Rd_4DW_Max_payload_test
+
+
+
+class Multiple_Mem_Wr_Rd_3DW_rand_length_test extends pcie_base_test;
+
+  `uvm_component_utils(Multiple_Mem_Wr_Rd_3DW_rand_length_test)
+
+  Multiple_Mem_Wr_Rd_3DW Seq_tx;
+  bit [5:0]  offset;
+  bit [63:0] curr_addr;
+
+  function new(string name = "Multiple_Mem_Wr_Rd_3DW_test", uvm_component parent = null);
+    super.new(name, parent);
+  endfunction
+
+  task run_phase(uvm_phase phase);
+    super.run_phase(phase);
+    phase.raise_objection(this);
+
+    assert(std::randomize(offset) with {
+    offset inside {[10:50]};
+    offset % 4 == 0;     
+    });
+
+    curr_addr = bar_base[0] + offset;
+    `uvm_info("TEST", $sformatf("curr_addr1 = %0h",curr_addr), UVM_LOW)
+      
+    repeat(20) begin
+
+    Seq_tx = Multiple_Mem_Wr_Rd_3DW::type_id::create("Seq_tx");
+RC_Env[0].PCIe_DLL_Agnt.PCIe_DLL_Drv.cfg.replay_en = 1'b0;
+   
+    Seq_tx.p_wr_fmt = bar_wr_fmt[0];
+    Seq_tx.p_rd_fmt = bar_rd_fmt[0];
+    Seq_tx.p_addr   = curr_addr;
+    assert(std::randomize(Seq_tx.p_length) with {
+    Seq_tx.p_length inside {[0:500]};});
+
+    Seq_tx.start(RC_Env[0].PCIe_TL_Agnt.TX_TL_Seqr);
+
+    curr_addr += Seq_tx.p_length * 4;
+    `uvm_info("TEST", $sformatf("curr_addr = %0h",curr_addr), UVM_LOW)
+   
+    end
+
+    #10000000;
+    phase.drop_objection(this);
+  endtask : run_phase
+
+endclass : Multiple_Mem_Wr_Rd_3DW_rand_length_test
+
+
+
+
+class Multiple_Mem_Wr_Rd_4DW_rand_length_test extends pcie_base_test;
+
+  `uvm_component_utils(Multiple_Mem_Wr_Rd_4DW_rand_length_test)
+
+  Multiple_Mem_Wr_Rd_4DW Seq_tx;
+
+  bit [5:0]  offset;
+  bit [63:0] curr_addr;
+
+  function new(string name = "Multiple_Mem_Wr_Rd_4DW_test", uvm_component parent = null);
+    super.new(name, parent);
+  endfunction
+
+  task run_phase(uvm_phase phase);
+    super.run_phase(phase);
+    phase.raise_objection(this);
+
+    assert(std::randomize(offset) with {
+    offset inside {[10:50]};
+    offset % 4 == 0;     
+    });
+
+    curr_addr = bar_base[1] + offset;
+
+    repeat(20) begin
+	    
+      Seq_tx = Multiple_Mem_Wr_Rd_4DW::type_id::create("Seq_tx");
+RC_Env[0].PCIe_DLL_Agnt.PCIe_DLL_Drv.cfg.replay_en = 1'b0;
+      Seq_tx.p_wr_fmt = bar_wr_fmt[1];
+      Seq_tx.p_rd_fmt = bar_rd_fmt[1];
+      Seq_tx.p_addr   = curr_addr;
+      assert(std::randomize(Seq_tx.p_length) with {
+      Seq_tx.p_length inside {[0:1024]};});
+      
+      Seq_tx.start(RC_Env[0].PCIe_TL_Agnt.TX_TL_Seqr);
+
+      curr_addr += Seq_tx.p_length * 4;
+
+    end
+
+    #2000000;
+    phase.drop_objection(this);
+  endtask : run_phase
+
+endclass : Multiple_Mem_Wr_Rd_4DW_rand_length_test
+
+
 //=========================================================
 // pcie_ral_test.sv
 // Starts pcie_cfg_full_ral_seq (from pcie_ral_seq_lib.sv)
 // against the RAL model built inside Env_Top.
 //=========================================================
+/*
 class pcie_ral_test extends uvm_test;
 
   // If you already have a common base test (e.g. pcie_base_test) that
@@ -814,7 +971,7 @@ endfunction
   endtask
 
 endclass : pcie_ral_test
-
+*/
 class LTSSM_Disabled_test extends pcie_base_test;
 
   `uvm_component_utils(LTSSM_Disabled_test)

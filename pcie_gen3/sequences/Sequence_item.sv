@@ -52,6 +52,26 @@ class Sequence_item extends uvm_sequence_item;
        bit       ecrc_error;
 
   //-----------------------------------------------------------
+  // Error-injection knob (err_inject_e, pcie_top_defines.svh).
+  // Set on `req` before `uvm_do_with`/`.start()` for the TL-layer
+  // scenarios (length, fmt, byte enables, ep, ECRC). Has a soft
+  // default of ERR_NONE so every existing/legacy sequence that
+  // never touches it is byte-for-byte unaffected; an inline
+  // `inject_err == ERR_XXX` constraint on a `uvm_do_with`/
+  // `randomize() with` always wins over the soft default.
+  // Corruption itself is applied in post_randomize() (length,
+  // fmt, byte enables, ep - always wins over whatever the solver
+  // picked, same effect as constraint_mode(0)+override without a
+  // second randomize() call) and in pack_tlp() (ECRC, since the
+  // digest itself is only computed there).
+  //-----------------------------------------------------------
+  rand err_inject_e inject_err;
+
+  constraint INJECT_ERR_DEFAULT {
+    soft inject_err == ERR_NONE;
+  }
+
+  //-----------------------------------------------------------
   // PMA layer fields
   //   Used by pma_tx_driver / pma_tx_monitor for both RC_MODE
   //   and EP_MODE roles (serial 130-bit word capture/replay and
@@ -102,12 +122,12 @@ bit [31:0] ep_dllp_packet_sb[$];
 
 
   // Flow-control credits exchanged via INITFC1/INITFC2 DLLPs
-  reg [`NUM_VC][8]  fc_ph;
-  reg [`NUM_VC][8]  fc_nph;
-  reg [`NUM_VC][8]  fc_cmplh;
-  reg [`NUM_VC][12] fc_pd;
-  reg [`NUM_VC][12] fc_npd;
-  reg [`NUM_VC][12] fc_cmpld;
+  reg [`NUM_VC-1:0][7:0]  fc_ph;
+  reg [`NUM_VC-1:0][7:0]  fc_nph;
+  reg [`NUM_VC-1:0][7:0]  fc_cmplh;
+  reg [`NUM_VC-1:0][11:0] fc_pd;
+  reg [`NUM_VC-1:0][11:0] fc_npd;
+  reg [`NUM_VC-1:0][11:0] fc_cmpld;
 
     bit [7:0]  rc_header_pfc;
   bit [7:0]  rc_header_npfc;
@@ -132,12 +152,13 @@ bit [2:0] ep_dllp_vc;
 bit ep_updated_credits;
 
 
-  reg [`NUM_VC][8]  ep_fc_ph;
-  reg [`NUM_VC][8]  ep_fc_nph;
-  reg [`NUM_VC][8]  ep_fc_cmplh;
-  reg [`NUM_VC][12] ep_fc_pd;
-  reg [`NUM_VC][12] ep_fc_npd;
-  reg [`NUM_VC][12] ep_fc_cmpld;
+  reg [`NUM_VC-1:0][7:0]  ep_fc_ph;
+  reg [`NUM_VC-1:0][7:0]  ep_fc_nph;
+  reg [`NUM_VC-1:0][7:0]  ep_fc_cmplh;
+  reg [`NUM_VC-1:0][11:0] ep_fc_pd;
+  reg [`NUM_VC-1:0][11:0] ep_fc_npd;
+  reg [`NUM_VC-1:0][11:0] ep_fc_cmpld;
+  bit [2:0] ep_vc;
 
 
   bit [11:0] ep_ack_nak_seq;
@@ -356,6 +377,59 @@ endfunction
     // TC -> VC mapping (mirrors the VC Resource Control register's
     // TC/VC mapping bits in real PCIe hardware)
     vc = tc2vc_table[tc];
+
+    //-----------------------------------------------------------
+    // TL-layer error-scenario injection. Runs AFTER the solver so
+    // it always wins over whatever constraint would otherwise
+    // apply (same effect as the constraint_mode(0)-then-override
+    // trick, without needing a second randomize() call). Because
+    // this touches the item's own fields, pack_tlp() and every
+    // downstream ECRC calc that walks tlp_q sees the corruption
+    // "for free" - no separate hack needed per layer.
+    //-----------------------------------------------------------
+    case(inject_err)
+
+      ERR_LEN_MISMATCH: begin
+	      length = $urandom_range(10,20);
+      end
+
+      ERR_IO_LEN: begin
+        // IO_RD/IO_WR length must be 1 per spec - force > 1.
+        length = 2;
+      end
+
+      ERR_CFG_LEN: begin
+        // CFG_RD0/CFG_WR0/CFG_RD1/CFG_WR1 length must be 1 - force > 1.
+        length = 2;
+      end
+
+      ERR_FMT_RTYPE: begin
+       // fmt = 3'b101;
+         r_type = 5'h11111;
+      end
+
+      ERR_BYTE_EN: begin
+        // Non-contiguous byte enables - illegal per spec (the set
+        // bits in first_BE/last_BE must form a contiguous range).
+        first_BE = 4'b0101;
+        last_BE  = 4'b1010;
+      end
+
+      ERR_EP_POISON: begin
+	if((e_type == MEM_WR) || (e_type == MEM_RD))
+        ep = 1'b1;
+      end
+
+      default: ; // ERR_NONE, ERR_ECRC (applied in pack_tlp(), since
+                 // the digest is only computed there),
+                 // ERR_UNSUPPORTED_REQ/ERR_UNEXP_CPL (picked via
+                 // the test's choice of address/tag, not a field
+                 // corruption), and the DLL/PHY-layer scenarios
+                 // (ERR_LCRC/ERR_DLLP_CRC/ERR_SEQ_NUM/ERR_STP/
+                 // ERR_REPLAY_ROLLOVER/ERR_REPLAY_TIMER), which are
+                 // applied in PCIe_DLL_Driver.sv off env_cfg's own
+                 // inject_err instead - nothing to do here.
+    endcase
   endfunction
       
   constraint MEM_RD_CONSTRAINT {
@@ -406,10 +480,15 @@ endfunction
           //addr[63:2] inside {[64'h4 : 64'h200]};
           
         }
-          
-          payload.size() inside {[0:1023]};
-      
-          length == payload.size();
+          payload.size() inside {[1:1024]};
+
+         if (payload.size() == 1024)
+         
+           length == 0;
+ 
+         else
+    
+           length == payload.size();          
 
           first_BE inside {4'b0001,4'b0011,4'b0111,4'b1111,4'b1000,4'b1100,4'b1110};
           last_BE  inside {4'b0001,4'b0011,4'b0111,4'b1111,4'b1000,4'b1100,4'b1110};
@@ -638,8 +717,16 @@ endfunction
     td inside {0,1};
   }
       
+  //-----------------------------------------------------------
+  // ep (poison, DW0 bit) stays 0 for every normal transaction,
+  // regardless of e_type. It is never left to the solver to
+  // pick - the only way it becomes 1 is the explicit
+  // inject_err == ERR_EP_POISON path in post_randomize(), which
+  // assigns ep directly (a plain assignment, not a randomize()
+  // call) and so is unaffected by this hard constraint.
+  //-----------------------------------------------------------
   constraint ERROR_POISON_CONSTRAINT {
-    ep inside {0,1};
+    ep == 0;
   }
       
   constraint ADDRESS_TRANSLATION_CONSTRAINT {
@@ -804,6 +891,11 @@ register_num, ext_register_num, dw), UVM_NONE)
       bit [31:0] ecrc;
       
       ecrc = calculate_ecrc();
+
+      // ERR_ECRC: flip every bit of the correctly-computed ECRC
+      // so the far end's recompute is guaranteed to mismatch.
+      if (inject_err == ERR_ECRC)
+        ecrc = ~ecrc;
       
       tlp_q.push_back(ecrc);
     end
@@ -853,9 +945,3 @@ register_num, ext_register_num, dw), UVM_NONE)
     endfunction : calculate_ecrc
 
 endclass : Sequence_item
-  
-  
-  	
-
-
-

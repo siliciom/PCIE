@@ -145,6 +145,19 @@ class Scoreboard_Top extends uvm_scoreboard;
   function automatic void mem_write(Sequence_item pkt);
     bit [63:0] a;
     int n;
+
+    // ERR_EP_POISON policy: a completer must not consume the
+    // data payload of a poisoned (EP=1) write - the poison
+    // indication is what matters, not the bytes. Drop the write
+    // instead of applying it to the memory model, and flag it so
+    // the negative test can confirm the poisoned data never landed.
+    if (pkt.ep) begin
+      `uvm_error("MALFORMED_TLP",
+        $sformatf("Poisoned MEM_WR (EP=1) received addr=%0h tag=%0h - dropping payload per completer policy",
+                   pkt.addr, pkt.tag))
+      return;
+    end
+
     a = pkt.addr;
     n = pkt.payload.size();
     foreach (pkt.payload[i]) begin

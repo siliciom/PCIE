@@ -1,0 +1,40 @@
+PCIe UVM REGRESSION
+Regression : regr_cov1
+Total      : 30
+PASS       : 24
+FAIL       : 6
+Duration   : 11401 sec
+
+PASSED TESTS
+PASS : Single_Mem_Wr_Rd_3DW_test
+PASS : Single_Mem_Wr_Rd_4DW_test
+PASS : Multiple_Mem_Wr_Rd_3DW_test
+PASS : Multiple_Mem_Wr_Rd_4DW_test
+PASS : Single_Mem_Wr_Rd_4DW_Max_payload_test
+PASS : Multiple_Mem_Wr_Rd_3DW_rand_length_test
+PASS : B2B_Mem_Wr_Rd_4DW_test
+PASS : Single_IO_Wr_Rd_3DW_test
+PASS : B2B_IO_Wr_Rd_3DW_test
+PASS : LTSSM_Disabled_test
+PASS : LTSSM_Loopback_test
+PASS : LTSSM_HotReset_test
+PASS : TL_ECRC_Error_test
+PASS : TL_Length_Mismatch_test
+PASS : TL_IO_Length_test
+PASS : TL_CFG_Length_test
+PASS : TL_Bad_BE_test
+PASS : TL_EP_Poison_test
+PASS : TL_Unsupported_Request_test
+PASS : TL_Completer_Abort_test
+PASS : DLL_LCRC_Error_test
+PASS : DLL_DLLP_CRC_Error_test
+PASS : DLL_Seq_Num_test
+PASS : DLL_Replay_Num_Rollover_test
+
+FAILED TESTS
+FAIL : Single_Mem_Wr_Rd_3DW_Max_payload_test
+FAIL : B2B_Mem_Wr_Rd_3DW_test
+FAIL : Multiple_IO_Wr_Rd_3DW_test
+FAIL : TL_Fmt_Rtype_Illegal_test
+FAIL : PHY_STP_Framing_Error_test
+FAIL : DLL_Replay_Timer_test

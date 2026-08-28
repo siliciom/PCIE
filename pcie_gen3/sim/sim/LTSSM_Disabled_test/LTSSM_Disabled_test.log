@@ -1,0 +1,727 @@
+# ** Note: (vsim-220) 'modelsim.ini' is used as the ini file.
+# ** Warning: (vsim-8689) Ignoring plusarg '+acc'.  Did you mean '-voptargs=+acc'?
+# vsim -c -coverage -cvgperinstance -debugDB "+acc" work.PCIe_top "+UVM_TESTNAME=LTSSM_Disabled_test" "+UVM_VERBOSITY=UVM_LOW" -l ./sim/LTSSM_Disabled_test/LTSSM_Disabled_test.log -do "coverage save -onexit ./coverage_reports/LTSSM_Disabled_test.ucdb; run -all" 
+# Start time: 13:44:46 on Aug 28,2026
+# ** Note: (vsim-8009) Loading existing optimized design _opt
+# //  Questa Sim-64
+# //  Version 2025.2_1 win64 Jun 25 2025
+# //
+# // Unpublished work. Copyright 2025 Siemens
+# //
+# // This material contains trade secrets or otherwise confidential information
+# // owned by Siemens Industry Software Inc. or its affiliates (collectively,
+# // "SISW"), or its licensors. Access to and use of this information is strictly
+# // limited as set forth in the Customer's applicable agreements with SISW.
+# //
+# // This material may not be copied, distributed, or otherwise disclosed outside
+# // of the Customer's facilities without the express written permission of SISW,
+# // and may not be used in any way not expressly authorized by SISW.
+# //
+# Loading sv_std.std
+# Loading work.TX_TL_DL_Interface(fast)
+# Loading work.RX_TL_DL_Interface(fast)
+# Loading work.TX_DLL_PCS_Interface(fast)
+# Loading work.RX_DLL_PCS_Interface(fast)
+# Loading work.pipe_tx_interface(fast)
+# Loading work.pipe_rx_interface(fast)
+# Loading work.phy_tx_interface(fast)
+# Loading work.phy_rx_interface(fast)
+# Loading mtiUvm.uvm_pkg(fast)
+# Loading work.Package(fast)
+# Loading work.Package_sv_unit(fast)
+# Loading mtiUvm.questa_uvm_pkg(fast)
+# Loading work.PCIe_top(fast)
+# Loading work.TX_TL_DL_Interface(fast__2)
+# Loading work.TX_DLL_PCS_Interface(fast__2)
+# Loading work.pipe_tx_interface(fast__2)
+# Loading work.phy_tx_interface(fast__2)
+# Loading work.RX_TL_DL_Interface(fast__2)
+# Loading work.RX_DLL_PCS_Interface(fast__2)
+# Loading work.pipe_rx_interface(fast__2)
+# Loading work.phy_rx_interface(fast__2)
+# Loading work.apb_interface(fast__1)
+# ** Warning: (vsim-3764) Stand-alone call to function 'try_put' treated as implicit void cast.
+#    Time: 0 ps  Iteration: 0  Region: /Package::PCIe_DLL_Driver File: ../agents/PCIe_DLL_Driver.sv Line: 398
+# ** Warning: (vsim-3764) Stand-alone call to function 'try_put' treated as implicit void cast.
+#    Time: 0 ps  Iteration: 0  Region: /Package::PCIe_DLL_Driver File: ../agents/PCIe_DLL_Driver.sv Line: 380
+# ** Warning: (vsim-3764) Stand-alone call to function 'try_put' treated as implicit void cast.
+#    Time: 0 ps  Iteration: 0  Region: /Package::PCIe_DLL_Driver File: ../agents/PCIe_DLL_Driver.sv Line: 375
+# ** Warning: (vsim-3764) Stand-alone call to function 'try_put' treated as implicit void cast.
+#    Time: 0 ps  Iteration: 0  Region: /Package::PCIe_DLL_Driver File: ../agents/PCIe_DLL_Driver.sv Line: 360
+# ** Warning: (vsim-3764) Stand-alone call to function 'try_put' treated as implicit void cast.
+#    Time: 0 ps  Iteration: 0  Region: /Package::PCIe_DLL_Driver File: ../agents/PCIe_DLL_Driver.sv Line: 314
+# ** Warning: (vsim-3764) Stand-alone call to function 'try_put' treated as implicit void cast.
+#    Time: 0 ps  Iteration: 0  Region: /Package::PCIe_DLL_Driver File: ../agents/PCIe_DLL_Driver.sv Line: 311
+# ** Warning: (vsim-3764) Stand-alone call to function 'try_put' treated as implicit void cast.
+#    Time: 0 ps  Iteration: 0  Region: /Package::PCIe_DLL_Driver File: ../agents/PCIe_DLL_Driver.sv Line: 305
+# Loading C:/questasim64_2025.2_1/uvm-1.1d\win64\uvm_dpi.dll
+# ** Note: (vsim-8716) Reusing existing debug database vsim.dbg.
+# coverage save -onexit ./coverage_reports/LTSSM_Disabled_test.ucdb
+#  run -all
+# ----------------------------------------------------------------
+# UVM-1.1d
+# (C) 2007-2013 Mentor Graphics Corporation
+# (C) 2007-2013 Cadence Design Systems, Inc.
+# (C) 2006-2013 Synopsys, Inc.
+# (C) 2011-2013 Cypress Semiconductor Corp.
+# ----------------------------------------------------------------
+# 
+#   ***********       IMPORTANT RELEASE NOTES         ************
+# 
+#   You are using a version of the UVM library that has been compiled
+#   with `UVM_NO_DEPRECATED undefined.
+#   See http://www.eda.org/svdb/view.php?id=3313 for more details.
+# 
+#   You are using a version of the UVM library that has been compiled
+#   with `UVM_OBJECT_MUST_HAVE_CONSTRUCTOR undefined.
+#   See http://www.eda.org/svdb/view.php?id=3770 for more details.
+# 
+#       (Specify +UVM_NO_RELNOTES to turn off this notice)
+# 
+# UVM_INFO @ 0: reporter [RNTST] Running test LTSSM_Disabled_test...
+# ** Warning: (vsim-8474) A higher value '1024' is found in bin 'len_1024' of Coverpoint 'cp_length'. It is invalid and will be ignored.
+#    Time: 0 ps  Iteration: 7  Process: /uvm_pkg::uvm_phase::m_run_phases/#FORK#1847_7ff4f638901 File: ../env/pcie_cov.sv Line: 100
+# ** Warning: (vsim-8549) After dropping the illegal, ignore or invalid values, the values list associated with scalar bin 'len_1024' in Coverpoint 'cp_length' of Covergroup instance 'TLP_cg' has converged to empty list. The bin will be taken out of coverage calculation.
+#    Time: 0 ps  Iteration: 7  Region: /uvm_pkg::uvm_phase::m_run_phases
+# ** Warning: (vsim-3881) ../env/pcie_cov.sv(156): Sign-and-Width conversion applied in bin 'vals' for Coverpoint 'cp_reg_num'. Value '255' changed to '63 (maximum)' value.
+#    Time: 0 ps  Iteration: 7  Region: /uvm_pkg::uvm_phase::m_run_phases
+# ** Warning: (vsim-3882) ../env/pcie_cov.sv(156): Out of bounds value range in bin 'vals' for Coverpoint 'cp_reg_num' converted to nearest valid bounded range of [0:63].
+#    Time: 0 ps  Iteration: 7  Region: /uvm_pkg::uvm_phase::m_run_phases
+# ** Warning: (vsim-3881) ../env/pcie_cov.sv(176): Sign-and-Width conversion applied in bin 'bc_gt_1024' for Coverpoint 'cp_byte_count'. Value '4096' changed to '4095 (maximum)' value.
+#    Time: 0 ps  Iteration: 7  Region: /uvm_pkg::uvm_phase::m_run_phases
+# ** Warning: (vsim-3882) ../env/pcie_cov.sv(176): Out of bounds value range in bin 'bc_gt_1024' for Coverpoint 'cp_byte_count' converted to nearest valid bounded range of [1025:4095].
+#    Time: 0 ps  Iteration: 7  Region: /uvm_pkg::uvm_phase::m_run_phases
+# UVM_INFO ../env/Env_Top.sv(43) @ 0: uvm_test_top.EP_Env_0 [Env_Top] uvm_test_top.EP_Env_0 configured as mode=EP_MODE
+# UVM_INFO ../env/Env_Top.sv(70) @ 0: uvm_test_top.EP_Env_0 [Env_Top] After init: cfg[0]=12345678 cfg[BAR0]=00000000
+# UVM_INFO ../agents/RX_PCIe_LUT.sv(90) @ 0: uvm_test_top.EP_Env_0.PCIe_TL_Agnt.PCIe_LUT [RX_PCIe_LUT] Using shared cfg_model: cfg[0]=12345678 cfg[BAR0]=00000000
+# UVM_INFO ../agents/RX_PCIe_LUT.sv(102) @ 0: uvm_test_top.EP_Env_0.PCIe_TL_Agnt.PCIe_LUT [INIT] After init: cfg[0]=12345678 cfg[BAR0]=00000000
+# UVM_INFO ../agents/PCIe_TL_Monitor.sv(72) @ 0: uvm_test_top.EP_Env_0.PCIe_TL_Agnt.TX_TL_Mon [TX_TL_Monitor] [uvm_test_top.EP_Env_0.PCIe_TL_Agnt.TX_TL_Mon] Configured: mode=EP_MODE
+# UVM_INFO ../agents/PCIe_TL_Monitor.sv(87) @ 0: uvm_test_top.EP_Env_0.PCIe_TL_Agnt.TX_TL_Mon [RX_TL_Monitor] [uvm_test_top.EP_Env_0.PCIe_TL_Agnt.TX_TL_Mon] Successfully accessed interface
+# UVM_INFO ../env/Env_Top.sv(43) @ 0: uvm_test_top.RC_Env_0 [Env_Top] uvm_test_top.RC_Env_0 configured as mode=RC_MODE
+# UVM_INFO ../env/Env_Top.sv(70) @ 0: uvm_test_top.RC_Env_0 [Env_Top] After init: cfg[0]=12345678 cfg[BAR0]=00000000
+# UVM_INFO ../agents/RX_PCIe_LUT.sv(90) @ 0: uvm_test_top.RC_Env_0.PCIe_TL_Agnt.PCIe_LUT [RX_PCIe_LUT] Using shared cfg_model: cfg[0]=12345678 cfg[BAR0]=00000000
+# UVM_INFO ../agents/RX_PCIe_LUT.sv(102) @ 0: uvm_test_top.RC_Env_0.PCIe_TL_Agnt.PCIe_LUT [INIT] After init: cfg[0]=12345678 cfg[BAR0]=00000000
+# UVM_INFO ../agents/PCIe_TL_Monitor.sv(72) @ 0: uvm_test_top.RC_Env_0.PCIe_TL_Agnt.TX_TL_Mon [TX_TL_Monitor] [uvm_test_top.RC_Env_0.PCIe_TL_Agnt.TX_TL_Mon] Configured: mode=RC_MODE
+# UVM_INFO ../agents/PCIe_TL_Monitor.sv(80) @ 0: uvm_test_top.RC_Env_0.PCIe_TL_Agnt.TX_TL_Mon [TX_TL_Monitor] [uvm_test_top.RC_Env_0.PCIe_TL_Agnt.TX_TL_Mon] Successfully accessed interface
+# UVM_INFO @ 0: reporter [UVMTOP] UVM testbench topology:
+# -------------------------------------------------------------------
+# Name                       Type                         Size  Value
+# -------------------------------------------------------------------
+# uvm_test_top               LTSSM_Disabled_test          -     @520 
+#   DL_Scb                   DL_Scoreboard                -     @595 
+#     ep_dllp_rx_imp         uvm_analysis_imp_ep_dllp_rx  -     @719 
+#     ep_dllp_tx_imp         uvm_analysis_imp_ep_dllp_tx  -     @711 
+#     ep_rx_imp              uvm_analysis_imp_ep_rx       -     @687 
+#     ep_tx_imp              uvm_analysis_imp_ep_tx       -     @679 
+#     rc_dllp_rx_imp         uvm_analysis_imp_rc_dllp_rx  -     @703 
+#     rc_dllp_tx_imp         uvm_analysis_imp_rc_dllp_tx  -     @695 
+#     rc_rx_imp              uvm_analysis_imp_rc_rx       -     @671 
+#     rc_tx_imp              uvm_analysis_imp_rc_tx       -     @663 
+#   EP_Env_0                 Env_Top                      -     @653 
+#     FC_mgr                 FC_Manager                   -     @737 
+#     PCIe_DLL_Agnt          PCIe_DLL_Agent               -     @767 
+#       PCIe_DLL_Drv         PCIe_DLL_Driver              -     @912 
+#         ep_FC_MD_Recv      uvm_analysis_imp_fc          -     @975 
+#         ep_RX_MD_Recv      uvm_analysis_imp_rx          -     @951 
+#         ep_TX_MD_Recv      uvm_analysis_imp_tx          -     @959 
+#         rc_FC_MD_Recv      uvm_analysis_imp_FC          -     @967 
+#         rc_RX_MD_Recv      uvm_analysis_imp_RX          -     @935 
+#         rc_TX_MD_Recv      uvm_analysis_imp_TX          -     @943 
+#         rsp_port           uvm_analysis_port            -     @927 
+#         seq_item_port      uvm_seq_item_pull_port       -     @919 
+#       PCIe_DLL_Mon         PCIe_DLL_Monitor             -     @793 
+#         ep_FC_MD_ap        uvm_analysis_port            -     @904 
+#         ep_RX_MD_ap        uvm_analysis_port            -     @816 
+#         ep_TX_MD_ap        uvm_analysis_port            -     @824 
+#         ep_dllp_rx         uvm_analysis_port            -     @888 
+#         ep_dllp_tx         uvm_analysis_port            -     @880 
+#         ep_rx              uvm_analysis_port            -     @856 
+#         ep_tx              uvm_analysis_port            -     @848 
+#         rc_FC_MD_ap        uvm_analysis_port            -     @896 
+#         rc_RX_MD_ap        uvm_analysis_port            -     @800 
+#         rc_TX_MD_ap        uvm_analysis_port            -     @808 
+#         rc_dllp_rx         uvm_analysis_port            -     @872 
+#         rc_dllp_tx         uvm_analysis_port            -     @864 
+#         rc_rx              uvm_analysis_port            -     @840 
+#         rc_tx              uvm_analysis_port            -     @832 
+#       PCIe_DLL_Seqr        PCIe_DLL_Sequencer           -     @983 
+#         rsp_export         uvm_analysis_export          -     @990 
+#         seq_item_export    uvm_seq_item_pull_imp        -     @1084
+#         arbitration_queue  array                        0     -    
+#         lock_queue         array                        0     -    
+#         num_last_reqs      integral                     32    'd1  
+#         num_last_rsps      integral                     32    'd1  
+#     PCIe_TL_Agnt           PCIe_TL_Agent                -     @760 
+#       PCIe_LUT             RX_PCIe_LUT                  -     @1286
+#         RX_LUT_imp         uvm_analysis_imp             -     @1293
+#         cpl_ap             uvm_analysis_port            -     @1301
+#       TX_TL_Drv            PCIe_TL_Driver               -     @1139
+#         cpl_imp            uvm_analysis_imp             -     @1162
+#         rsp_port           uvm_analysis_port            -     @1154
+#         seq_item_port      uvm_seq_item_pull_port       -     @1146
+#       TX_TL_Mon            PCIe_TL_Monitor              -     @1108
+#         RX_TL_MON_Send     uvm_analysis_port            -     @1131
+#         RX_TL_Send         uvm_analysis_port            -     @1123
+#         TX_TL_Send         uvm_analysis_port            -     @1115
+#       TX_TL_Seqr           PCIe_TL_Sequencer            -     @1170
+#         rsp_export         uvm_analysis_export          -     @1177
+#         seq_item_export    uvm_seq_item_pull_imp        -     @1271
+#         arbitration_queue  array                        0     -    
+#         lock_queue         array                        0     -    
+#         num_last_reqs      integral                     32    'd1  
+#         num_last_rsps      integral                     32    'd1  
+#       tag_mgr              Tag_Manager                  -     @1279
+#     TX_MAC_Agnt            PCIe_MAC_agent               -     @774 
+#       drv                  PCIe_MAC_driver              -     @1338
+#         mac_rx_recv_dll    uvm_analysis_imp_port_g      -     @1519
+#         mac_rx_recv_rx     uvm_analysis_imp_port_h      -     @1527
+#         mac_tx_recv_dll    uvm_analysis_imp_port_e      -     @1503
+#         mac_tx_recv_rx     uvm_analysis_imp_port_f      -     @1511
+#         rsp_port           uvm_analysis_port            -     @1353
+#         seq_item_port      uvm_seq_item_pull_port       -     @1345
+#       mon                  PCIe_MAC_monitor             -     @1331
+#         mac_rx_dll_port    uvm_analysis_port            -     @1562
+#         mac_rx_rx_port     uvm_analysis_port            -     @1570
+#         mac_sb_ep_rx_port  uvm_analysis_port            -     @1602
+#         mac_sb_ep_tx_port  uvm_analysis_port            -     @1594
+#         mac_sb_rc_rx_port  uvm_analysis_port            -     @1586
+#         mac_sb_rc_tx_port  uvm_analysis_port            -     @1578
+#         mac_tx_dll_port    uvm_analysis_port            -     @1546
+#         mac_tx_rx_port     uvm_analysis_port            -     @1554
+#       seqr                 PCIe_MAC_sequencer           -     @1361
+#         rsp_export         uvm_analysis_export          -     @1368
+#         seq_item_export    uvm_seq_item_pull_imp        -     @1462
+#         arbitration_queue  array                        0     -    
+#         lock_queue         array                        0     -    
+#         num_last_reqs      integral                     32    'd1  
+#         num_last_rsps      integral                     32    'd1  
+#     TX_PMA_Agnt            PCIe_PMA_agent               -     @781 
+#       PCIe_PMA_drv         PCIe_PMA_driver              -     @1618
+#         pma_rx_recv_mac    uvm_analysis_imp_port_a      -     @1776
+#         pma_rx_recv_tx     uvm_analysis_imp_port_b      -     @1784
+#         pma_tx_recv_mac    uvm_analysis_imp_port_c      -     @1760
+#         pma_tx_recv_rx     uvm_analysis_imp_port_d      -     @1768
+#         rsp_port           uvm_analysis_port            -     @1633
+#         seq_item_port      uvm_seq_item_pull_port       -     @1625
+#       PCIe_PMA_mon         PCIe_PMA_monitor             -     @1750
+#         pma_rx_mac_port    uvm_analysis_port            -     @1811
+#         pma_rx_tx_port     uvm_analysis_port            -     @1819
+#         pma_tx_mac_port    uvm_analysis_port            -     @1795
+#         pma_tx_rx_port     uvm_analysis_port            -     @1803
+#       PCIe_PMA_seqr        PCIe_PMA_sequencer           -     @1641
+#         rsp_export         uvm_analysis_export          -     @1648
+#         seq_item_export    uvm_seq_item_pull_imp        -     @1742
+#         arbitration_queue  array                        0     -    
+#         lock_queue         array                        0     -    
+#         num_last_reqs      integral                     32    'd1  
+#         num_last_rsps      integral                     32    'd1  
+#     Vc_Arb                 VC_Arbiter                   -     @749 
+#   RC_Env_0                 Env_Top                      -     @639 
+#     FC_mgr                 FC_Manager                   -     @1843
+#     PCIe_DLL_Agnt          PCIe_DLL_Agent               -     @1869
+#       PCIe_DLL_Drv         PCIe_DLL_Driver              -     @2010
+#         ep_FC_MD_Recv      uvm_analysis_imp_fc          -     @2073
+#         ep_RX_MD_Recv      uvm_analysis_imp_rx          -     @2049
+#         ep_TX_MD_Recv      uvm_analysis_imp_tx          -     @2057
+#         rc_FC_MD_Recv      uvm_analysis_imp_FC          -     @2065
+#         rc_RX_MD_Recv      uvm_analysis_imp_RX          -     @2033
+#         rc_TX_MD_Recv      uvm_analysis_imp_TX          -     @2041
+#         rsp_port           uvm_analysis_port            -     @2025
+#         seq_item_port      uvm_seq_item_pull_port       -     @2017
+#       PCIe_DLL_Mon         PCIe_DLL_Monitor             -     @1891
+#         ep_FC_MD_ap        uvm_analysis_port            -     @2002
+#         ep_RX_MD_ap        uvm_analysis_port            -     @1914
+#         ep_TX_MD_ap        uvm_analysis_port            -     @1922
+#         ep_dllp_rx         uvm_analysis_port            -     @1986
+#         ep_dllp_tx         uvm_analysis_port            -     @1978
+#         ep_rx              uvm_analysis_port            -     @1954
+#         ep_tx              uvm_analysis_port            -     @1946
+#         rc_FC_MD_ap        uvm_analysis_port            -     @1994
+#         rc_RX_MD_ap        uvm_analysis_port            -     @1898
+#         rc_TX_MD_ap        uvm_analysis_port            -     @1906
+#         rc_dllp_rx         uvm_analysis_port            -     @1970
+#         rc_dllp_tx         uvm_analysis_port            -     @1962
+#         rc_rx              uvm_analysis_port            -     @1938
+#         rc_tx              uvm_analysis_port            -     @1930
+#       PCIe_DLL_Seqr        PCIe_DLL_Sequencer           -     @2081
+#         rsp_export         uvm_analysis_export          -     @2088
+#         seq_item_export    uvm_seq_item_pull_imp        -     @2182
+#         arbitration_queue  array                        0     -    
+#         lock_queue         array                        0     -    
+#         num_last_reqs      integral                     32    'd1  
+#         num_last_rsps      integral                     32    'd1  
+#     PCIe_TL_Agnt           PCIe_TL_Agent                -     @1862
+#       PCIe_LUT             RX_PCIe_LUT                  -     @2383
+#         RX_LUT_imp         uvm_analysis_imp             -     @2390
+#         cpl_ap             uvm_analysis_port            -     @2398
+#       TX_TL_Drv            PCIe_TL_Driver               -     @2236
+#         cpl_imp            uvm_analysis_imp             -     @2259
+#         rsp_port           uvm_analysis_port            -     @2251
+#         seq_item_port      uvm_seq_item_pull_port       -     @2243
+#       TX_TL_Mon            PCIe_TL_Monitor              -     @2205
+#         RX_TL_MON_Send     uvm_analysis_port            -     @2228
+#         RX_TL_Send         uvm_analysis_port            -     @2220
+#         TX_TL_Send         uvm_analysis_port            -     @2212
+#       TX_TL_Seqr           PCIe_TL_Sequencer            -     @2267
+#         rsp_export         uvm_analysis_export          -     @2274
+#         seq_item_export    uvm_seq_item_pull_imp        -     @2368
+#         arbitration_queue  array                        0     -    
+#         lock_queue         array                        0     -    
+#         num_last_reqs      integral                     32    'd1  
+#         num_last_rsps      integral                     32    'd1  
+#       tag_mgr              Tag_Manager                  -     @2376
+#     TX_MAC_Agnt            PCIe_MAC_agent               -     @1876
+#       drv                  PCIe_MAC_driver              -     @2432
+#         mac_rx_recv_dll    uvm_analysis_imp_port_g      -     @2581
+#         mac_rx_recv_rx     uvm_analysis_imp_port_h      -     @2589
+#         mac_tx_recv_dll    uvm_analysis_imp_port_e      -     @2565
+#         mac_tx_recv_rx     uvm_analysis_imp_port_f      -     @2573
+#         rsp_port           uvm_analysis_port            -     @2447
+#         seq_item_port      uvm_seq_item_pull_port       -     @2439
+#       mon                  PCIe_MAC_monitor             -     @2425
+#         mac_rx_dll_port    uvm_analysis_port            -     @2624
+#         mac_rx_rx_port     uvm_analysis_port            -     @2632
+#         mac_sb_ep_rx_port  uvm_analysis_port            -     @2664
+#         mac_sb_ep_tx_port  uvm_analysis_port            -     @2656
+#         mac_sb_rc_rx_port  uvm_analysis_port            -     @2648
+#         mac_sb_rc_tx_port  uvm_analysis_port            -     @2640
+#         mac_tx_dll_port    uvm_analysis_port            -     @2608
+#         mac_tx_rx_port     uvm_analysis_port            -     @2616
+#       seqr                 PCIe_MAC_sequencer           -     @2455
+#         rsp_export         uvm_analysis_export          -     @2462
+#         seq_item_export    uvm_seq_item_pull_imp        -     @2556
+#         arbitration_queue  array                        0     -    
+#         lock_queue         array                        0     -    
+#         num_last_reqs      integral                     32    'd1  
+#         num_last_rsps      integral                     32    'd1  
+#     TX_PMA_Agnt            PCIe_PMA_agent               -     @1883
+#       PCIe_PMA_drv         PCIe_PMA_driver              -     @2680
+#         pma_rx_recv_mac    uvm_analysis_imp_port_a      -     @2836
+#         pma_rx_recv_tx     uvm_analysis_imp_port_b      -     @2844
+#         pma_tx_recv_mac    uvm_analysis_imp_port_c      -     @2820
+#         pma_tx_recv_rx     uvm_analysis_imp_port_d      -     @2828
+#         rsp_port           uvm_analysis_port            -     @2695
+#         seq_item_port      uvm_seq_item_pull_port       -     @2687
+#       PCIe_PMA_mon         PCIe_PMA_monitor             -     @2812
+#         pma_rx_mac_port    uvm_analysis_port            -     @2871
+#         pma_rx_tx_port     uvm_analysis_port            -     @2879
+#         pma_tx_mac_port    uvm_analysis_port            -     @2855
+#         pma_tx_rx_port     uvm_analysis_port            -     @2863
+#       PCIe_PMA_seqr        PCIe_PMA_sequencer           -     @2703
+#         rsp_export         uvm_analysis_export          -     @2710
+#         seq_item_export    uvm_seq_item_pull_imp        -     @2804
+#         arbitration_queue  array                        0     -    
+#         lock_queue         array                        0     -    
+#         num_last_reqs      integral                     32    'd1  
+#         num_last_rsps      integral                     32    'd1  
+#     Vc_Arb                 VC_Arbiter                   -     @1853
+#   TL_Scb                   TL_Scoreboard                -     @574 
+#     RX_TL_Recv             uvm_analysis_imp_rr          -     @2903
+#     TX_TL_Recv             uvm_analysis_imp_tr          -     @2895
+#     r_port                 uvm_analysis_port            -     @2919
+#     t_port                 uvm_analysis_port            -     @2911
+#   Top_Scb                  Scoreboard_Top               -     @581 
+#     r_imp                  uvm_analysis_imp_r           -     @2935
+#     t_imp                  uvm_analysis_imp_t           -     @2927
+#   cpl_fifo                 uvm_tlm_analysis_fifo #(T)   -     @527 
+#     analysis_export        uvm_analysis_imp             -     @566 
+#     get_ap                 uvm_analysis_port            -     @558 
+#     get_peek_export        uvm_get_peek_imp             -     @542 
+#     put_ap                 uvm_analysis_port            -     @550 
+#     put_export             uvm_put_imp                  -     @534 
+#   mac_scb                  PCIe_MAC_Scoreboard          -     @588 
+#     ep_rx_imp              uvm_analysis_imp_ep_rx       -     @2967
+#     ep_tx_imp              uvm_analysis_imp_ep_tx       -     @2959
+#     rc_rx_imp              uvm_analysis_imp_rc_rx       -     @2951
+#     rc_tx_imp              uvm_analysis_imp_rc_tx       -     @2943
+#   pcie_cov                 PCIe_TL_Coverage             -     @602 
+#     RX_TL_Recvx            uvm_analysis_imp_rrx         -     @2983
+#     TX_TL_Recvx            uvm_analysis_imp_trx         -     @2975
+#     analysis_imp           uvm_analysis_imp             -     @609 
+# -------------------------------------------------------------------
+# 
+# UVM_INFO ../tests/Test.sv(988) @ 0: uvm_test_top [TEST] Setting Link Disable on RC and EP -> directing LTSSM to DISABLED out of Configuration.Linkwidth.Start
+# UVM_INFO ../agents/PCIe_MAC_Driver.sv(3740) @ 0: uvm_test_top.RC_Env_0.TX_MAC_Agnt.drv [TX_LTSSM] Entered DETECT_QUIET
+# UVM_INFO ../agents/PCIe_TL_Monitor.sv(103) @ 0: uvm_test_top.RC_Env_0.PCIe_TL_Agnt.TX_TL_Mon [RX_TL_MONITOR] RC MODE TL MONITOR
+# UVM_INFO ../agents/RX_PCIe_LUT.sv(181) @ 0: uvm_test_top.RC_Env_0.PCIe_TL_Agnt.PCIe_LUT [RX_PCIe_LUT] LUT RUN PHASE STARTED
+# UVM_INFO ../agents/PCIe_MAC_Driver.sv(3786) @ 0: uvm_test_top.EP_Env_0.TX_MAC_Agnt.drv [RX_LTSSM] Entered DETECT_QUIET
+# UVM_INFO ../agents/PCIe_TL_Monitor.sv(126) @ 0: uvm_test_top.EP_Env_0.PCIe_TL_Agnt.TX_TL_Mon [RX_TL_MONITOR] EP MODE TL MONITOR
+# UVM_INFO ../agents/RX_PCIe_LUT.sv(181) @ 0: uvm_test_top.EP_Env_0.PCIe_TL_Agnt.PCIe_LUT [RX_PCIe_LUT] LUT RUN PHASE STARTED
+# UVM_INFO ../agents/PCIe_MAC_Driver.sv(3819) @ 20000020: uvm_test_top.EP_Env_0.TX_MAC_Agnt.drv [RX_LTSSM] Exit DETECT_QUIET -> DETECT_ACTIVE
+# UVM_INFO ../agents/PCIe_MAC_Driver.sv(1266) @ 20000020: uvm_test_top.EP_Env_0.TX_MAC_Agnt.drv [RX_LTSSM] Entered DETECT_ACTIVE
+# UVM_INFO ../agents/PCIe_MAC_Driver.sv(3778) @ 20000020: uvm_test_top.RC_Env_0.TX_MAC_Agnt.drv [TX_LTSSM] Exit DETECT_QUIET -> DETECT_ACTIVE
+# UVM_INFO ../agents/PCIe_MAC_Driver.sv(1169) @ 20000020: uvm_test_top.RC_Env_0.TX_MAC_Agnt.drv [TX_LTSSM] Entered DETECT_ACTIVE
+# UVM_INFO ../agents/PCIe_MAC_Driver.sv(1471) @ 20000340: uvm_test_top.EP_Env_0.TX_MAC_Agnt.drv [RX_LTSSM] Entered POLLING_ACTIVE (advertising Gen1)
+# UVM_INFO ../agents/PCIe_MAC_Driver.sv(1204) @ 20000340: uvm_test_top.RC_Env_0.TX_MAC_Agnt.drv [TX_LTSSM] Receiver detected on all active lanes
+# UVM_INFO ../agents/PCIe_MAC_Driver.sv(1351) @ 20000340: uvm_test_top.RC_Env_0.TX_MAC_Agnt.drv [TX_LTSSM] Entered POLLING_ACTIVE (advertising Gen1)
+# UVM_INFO ../env/MAC_SB.sv(85) @ 20000720: uvm_test_top.mac_scb [MAC_SB_EP_TX] Received EP_TX packet. Queue size(before push)=0, Data='{381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090}, Time=20000720
+# UVM_INFO ../env/MAC_SB.sv(94) @ 20000720: uvm_test_top.mac_scb [EP_TX] EP_TX Count=1 Queue=1
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(347) @ 20000720: uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon [EP_MAC_TX_MON1] [uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon] ep_pipe_tx_item written to mac_sb_ep_tx_port successfully. TxData='{381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090}, size=8, time=20000720
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(355) @ 20000720: uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon [EP_MAC_TX_MON] [uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon] PIPE TxData CAPTURED '{381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090} size=8 time=            20000720
+# UVM_INFO ../agents/PCIe_PMA_Monitor.sv(235) @ 20000720: uvm_test_top.EP_Env_0.TX_PMA_Agnt.PCIe_PMA_mon [PMA_RX_MON] [uvm_test_top.EP_Env_0.TX_PMA_Agnt.PCIe_PMA_mon] RX packet captured on PMA lanes, forwarded to PMA TX path
+# UVM_INFO ../agents/PCIe_PMA_Driver.sv(130) @ 20000720: uvm_test_top.EP_Env_0.TX_PMA_Agnt.PCIe_PMA_drv [PMA_RX_DRV] [uvm_test_top.EP_Env_0.TX_PMA_Agnt.PCIe_PMA_drv] RX packet received on PMA MAC lanes
+# UVM_INFO ../env/MAC_SB.sv(47) @ 20000800: uvm_test_top.mac_scb [MAC_SB_RC_TX] Received RC_TX packet. Queue size(before push)=0, Data='{381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090}, Time=20000800
+# UVM_INFO ../env/MAC_SB.sv(56) @ 20000800: uvm_test_top.mac_scb [RC_TX] RC_TX Count=1 Queue=1
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(286) @ 20000800: uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon [RC_MAC_TX_MON1] rc_pipe_tx_item written to mac_sb_rc_tx_port successfully. pma_rc_tx_q='{381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090}, size=10, time=20000800
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(293) @ 20000800: uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon [RC_MAC_TX_MON] [uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon] PIPE TxData CAPTURED '{381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090} size=10 time=            20000800
+# UVM_INFO ../agents/PCIe_PMA_Monitor.sv(123) @ 20000800: uvm_test_top.RC_Env_0.TX_PMA_Agnt.PCIe_PMA_mon [PMA_TX_MON] [uvm_test_top.RC_Env_0.TX_PMA_Agnt.PCIe_PMA_mon] TX packet captured on PMA lanes, forwarded to PMA RX path
+# UVM_INFO ../agents/PCIe_PMA_Driver.sv(98) @ 20000800: uvm_test_top.RC_Env_0.TX_PMA_Agnt.PCIe_PMA_drv [PMA_TX_DRV] [uvm_test_top.RC_Env_0.TX_PMA_Agnt.PCIe_PMA_drv] Driving TX packet onto PMA lanes
+# lane 0 data = '{381488414508170736881543580536635542090} size 1
+# lane 0 data = '{381488414508170736881543580536635542090, 381488414508170736881543580536635542090} size 2
+# lane 0 data = '{381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090} size 3
+# lane 0 data = '{381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090} size 4
+# lane 0 data = '{381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090} size 5
+# lane 0 data = '{381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090} size 6
+# lane 0 data = '{381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090} size 7
+# UVM_INFO ../agents/PCIe_PMA_Monitor.sv(179) @ 20004882: uvm_test_top.RC_Env_0.TX_PMA_Agnt.PCIe_PMA_mon [PMA_TX_MON] [uvm_test_top.RC_Env_0.TX_PMA_Agnt.PCIe_PMA_mon] TX packet reassembled from PMA lanes, forwarded to MAC layer
+# UVM_INFO ../agents/PCIe_PMA_Driver.sv(112) @ 20004882: uvm_test_top.RC_Env_0.TX_PMA_Agnt.PCIe_PMA_drv [PMA_TX_DRV] [uvm_test_top.RC_Env_0.TX_PMA_Agnt.PCIe_PMA_drv] Driving TX packet onto PMA MAC lanes
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(622) @ 20004920: uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon [MAC_TX] Packet Sent lane0 1effff000100000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(622) @ 20004960: uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon [MAC_TX] Packet Sent lane0 1effff000100000000001e1e1e1e4a4a
+# lane 0 data = '{381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090} size 8
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(622) @ 20005000: uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon [MAC_TX] Packet Sent lane0 1effff000100000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(622) @ 20005040: uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon [MAC_TX] Packet Sent lane0 1effff000100000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(622) @ 20005080: uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon [MAC_TX] Packet Sent lane0 1effff000100000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(622) @ 20005120: uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon [MAC_TX] Packet Sent lane0 1effff000100000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(622) @ 20005160: uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon [MAC_TX] Packet Sent lane0 1effff000100000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(622) @ 20005200: uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon [MAC_TX] Packet Sent lane0 1effff000100000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(770) @ 20005240: uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon [MAC_TX_MON] [uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon] RC MAC packet forwarded to RX path: tlp_queue=0 dlp_queue=0
+# UVM_INFO ../env/MAC_SB.sv(103) @ 20005240: uvm_test_top.mac_scb [MAC_SB_RC_RX] Received RC_RX packet. Queue size(before push)=0, Data='{381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090}, Time=20005240
+# UVM_INFO ../env/MAC_SB.sv(112) @ 20005240: uvm_test_top.mac_scb [RC_RX] RC_RX Count=1 Queue=1
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(316) @ 20005240: uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon [RC_MAC_RX_MON1] [uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon] rc_pipe_rx_item written to mac_sb_rc_rx_port successfully. RxData='{381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090}, queue_size=8, time=20005240
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(324) @ 20005240: uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon [RC_MAC_RX_MON] [uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon] PIPE RxData CAPTURED '{381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090} queue_size=8 time=            20005240
+# UVM_INFO ../agents/PCIe_MAC_Driver.sv(1405) @ 20005240: uvm_test_top.RC_Env_0.TX_MAC_Agnt.drv [MAC_TX_DRV]  wait_completetd RC_ORDERED_SETS 0 DWORDs
+# UVM_INFO ../env/MAC_SB.sv(162) @ 20005240: uvm_test_top.mac_scb [CPL_CHECK] Before pop: EP_TX_Q=1 RC_RX_Q=1
+# UVM_INFO ../env/MAC_SB.sv(170) @ 20005240: uvm_test_top.mac_scb [CPL_CHECK] Comparing EP_TX(size=8) with RC_RX(size=8)
+# UVM_INFO ../env/MAC_SB.sv(230) @ 20005240: uvm_test_top.mac_scb [MAC_SB_COMPARE2] Index=0  EP_TX=11effff000100000000001e1e1e1e4a4a  RC_RX=11effff000100000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(230) @ 20005240: uvm_test_top.mac_scb [MAC_SB_COMPARE2] Index=1  EP_TX=11effff000100000000001e1e1e1e4a4a  RC_RX=11effff000100000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(230) @ 20005240: uvm_test_top.mac_scb [MAC_SB_COMPARE2] Index=2  EP_TX=11effff000100000000001e1e1e1e4a4a  RC_RX=11effff000100000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(230) @ 20005240: uvm_test_top.mac_scb [MAC_SB_COMPARE2] Index=3  EP_TX=11effff000100000000001e1e1e1e4a4a  RC_RX=11effff000100000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(230) @ 20005240: uvm_test_top.mac_scb [MAC_SB_COMPARE2] Index=4  EP_TX=11effff000100000000001e1e1e1e4a4a  RC_RX=11effff000100000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(230) @ 20005240: uvm_test_top.mac_scb [MAC_SB_COMPARE2] Index=5  EP_TX=11effff000100000000001e1e1e1e4a4a  RC_RX=11effff000100000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(230) @ 20005240: uvm_test_top.mac_scb [MAC_SB_COMPARE2] Index=6  EP_TX=11effff000100000000001e1e1e1e4a4a  RC_RX=11effff000100000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(230) @ 20005240: uvm_test_top.mac_scb [MAC_SB_COMPARE2] Index=7  EP_TX=11effff000100000000001e1e1e1e4a4a  RC_RX=11effff000100000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(248) @ 20005240: uvm_test_top.mac_scb [MAC_SB_COMPLETION_PASS] [COMPLETION] MATCH (pass cnt=1) EP_TX='{381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090} RC_RX='{381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090}
+# lane 0 data = '{381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090} size 9
+# lane 0 data = '{381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090} size 10
+# UVM_INFO ../agents/PCIe_PMA_Monitor.sv(294) @ 20006002: uvm_test_top.EP_Env_0.TX_PMA_Agnt.PCIe_PMA_mon [PMA_RX_MON] [uvm_test_top.EP_Env_0.TX_PMA_Agnt.PCIe_PMA_mon] RX packet reassembled from PMA lanes, forwarded to MAC layer
+# UVM_INFO ../agents/PCIe_PMA_Driver.sv(121) @ 20006002: uvm_test_top.EP_Env_0.TX_PMA_Agnt.PCIe_PMA_drv [PMA_RX_DRV] [uvm_test_top.EP_Env_0.TX_PMA_Agnt.PCIe_PMA_drv] RX packet received on PMA lanes
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(891) @ 20006040: uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon [MAC_RX] EP_ORDERSETS lane0 1effff000100000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(891) @ 20006080: uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon [MAC_RX] EP_ORDERSETS lane0 1effff000100000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(891) @ 20006120: uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon [MAC_RX] EP_ORDERSETS lane0 1effff000100000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(891) @ 20006160: uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon [MAC_RX] EP_ORDERSETS lane0 1effff000100000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(891) @ 20006200: uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon [MAC_RX] EP_ORDERSETS lane0 1effff000100000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(891) @ 20006240: uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon [MAC_RX] EP_ORDERSETS lane0 1effff000100000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(891) @ 20006280: uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon [MAC_RX] EP_ORDERSETS lane0 1effff000100000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(891) @ 20006320: uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon [MAC_RX] EP_ORDERSETS lane0 1effff000100000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(891) @ 20006360: uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon [MAC_RX] EP_ORDERSETS lane0 1effff000100000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(891) @ 20006400: uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon [MAC_RX] EP_ORDERSETS lane0 1effff000100000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(1033) @ 20006440: uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon [MAC_RX_MON] [uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon] EP MAC packet forwarded to RX path: tlp_queue=0 dlp_queue=0
+# UVM_INFO ../env/MAC_SB.sv(65) @ 20006440: uvm_test_top.mac_scb [MAC_SB_EP_RX] Received EP_RX packet. Queue size(before push)=0, Data='{381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090}, Time=20006440
+# UVM_INFO ../env/MAC_SB.sv(74) @ 20006440: uvm_test_top.mac_scb [EP_RX] EP_RX Count=1 Queue=1
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(377) @ 20006440: uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon [EP_MAC_RX_MON1] [uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon] ep_pipe_rx_item written to mac_sb_ep_rx_port successfully. RxData='{381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090}, queue_size=10, time=20006440
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(385) @ 20006440: uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon [EP_MAC_RX_MON] [uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon] PIPE RxData CAPTURED '{381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090} queue_size=10 time=            20006440
+# UVM_INFO ../agents/PCIe_MAC_Driver.sv(1510) @ 20006440: uvm_test_top.EP_Env_0.TX_MAC_Agnt.drv [MAC_TX_DRV]  wait_completed ORDERED_SETS 0 DWORDs ts1_sent_count =          8
+# UVM_INFO ../env/MAC_SB.sv(137) @ 20006440: uvm_test_top.mac_scb [REQ_CHECK] Before pop: RC_TX_Q=1 EP_RX_Q=1
+# UVM_INFO ../env/MAC_SB.sv(145) @ 20006440: uvm_test_top.mac_scb [REQ_CHECK] Comparing RC_TX(size=10) with EP_RX(size=10)
+# UVM_INFO ../env/MAC_SB.sv(187) @ 20006440: uvm_test_top.mac_scb [MAC_SB_COMPARE1] Index=0  TX=11effff000100000000001e1e1e1e4a4a  RX=11effff000100000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(187) @ 20006440: uvm_test_top.mac_scb [MAC_SB_COMPARE1] Index=1  TX=11effff000100000000001e1e1e1e4a4a  RX=11effff000100000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(187) @ 20006440: uvm_test_top.mac_scb [MAC_SB_COMPARE1] Index=2  TX=11effff000100000000001e1e1e1e4a4a  RX=11effff000100000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(187) @ 20006440: uvm_test_top.mac_scb [MAC_SB_COMPARE1] Index=3  TX=11effff000100000000001e1e1e1e4a4a  RX=11effff000100000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(187) @ 20006440: uvm_test_top.mac_scb [MAC_SB_COMPARE1] Index=4  TX=11effff000100000000001e1e1e1e4a4a  RX=11effff000100000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(187) @ 20006440: uvm_test_top.mac_scb [MAC_SB_COMPARE1] Index=5  TX=11effff000100000000001e1e1e1e4a4a  RX=11effff000100000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(187) @ 20006440: uvm_test_top.mac_scb [MAC_SB_COMPARE1] Index=6  TX=11effff000100000000001e1e1e1e4a4a  RX=11effff000100000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(187) @ 20006440: uvm_test_top.mac_scb [MAC_SB_COMPARE1] Index=7  TX=11effff000100000000001e1e1e1e4a4a  RX=11effff000100000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(187) @ 20006440: uvm_test_top.mac_scb [MAC_SB_COMPARE1] Index=8  TX=11effff000100000000001e1e1e1e4a4a  RX=11effff000100000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(187) @ 20006440: uvm_test_top.mac_scb [MAC_SB_COMPARE1] Index=9  TX=11effff000100000000001e1e1e1e4a4a  RX=11effff000100000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(204) @ 20006440: uvm_test_top.mac_scb [MAC_SB_REQUEST_PASS] [REQUEST] MATCH (pass cnt=2) TX='{381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090} RX='{381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090, 381488414508170736881543580536635542090}
+# UVM_INFO ../agents/PCIe_MAC_Driver.sv(1543) @ 70000340: uvm_test_top.EP_Env_0.TX_MAC_Agnt.drv [RX_LTSSM] Rate negotiation: own Gen1, partner rate_id=00000001 (max Gen1) -> negotiated Gen1
+# UVM_INFO ../agents/PCIe_MAC_Driver.sv(1548) @ 70000340: uvm_test_top.EP_Env_0.TX_MAC_Agnt.drv [RX_LTSSM] >=1024 TS1 sent, 8 consecutive matching TS received -> POLLING_CONFIGURATION
+# UVM_INFO ../agents/PCIe_MAC_Driver.sv(1682) @ 70000340: uvm_test_top.EP_Env_0.TX_MAC_Agnt.drv [TX_LTSSM] EP Entered POLLING_CONFIGURATION
+# UVM_INFO ../agents/PCIe_MAC_Driver.sv(1441) @ 70000340: uvm_test_top.RC_Env_0.TX_MAC_Agnt.drv [TX_LTSSM] Rate negotiation: own Gen1, partner rate_id=00000001 (max Gen1) -> negotiated Gen1
+# UVM_INFO ../agents/PCIe_MAC_Driver.sv(1446) @ 70000340: uvm_test_top.RC_Env_0.TX_MAC_Agnt.drv [TX_LTSSM] >=1024 TS1 sent, 8 consecutive matching TS received -> POLLING_CONFIGURATION
+# UVM_INFO ../agents/PCIe_MAC_Driver.sv(1603) @ 70000340: uvm_test_top.RC_Env_0.TX_MAC_Agnt.drv [TX_LTSSM] Entered POLLING_CONFIGURATION
+# UVM_INFO ../env/MAC_SB.sv(85) @ 70000720: uvm_test_top.mac_scb [MAC_SB_EP_TX] Received EP_TX packet. Queue size(before push)=0, Data='{401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165}, Time=70000720
+# UVM_INFO ../env/MAC_SB.sv(94) @ 70000720: uvm_test_top.mac_scb [EP_TX] EP_TX Count=2 Queue=1
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(347) @ 70000720: uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon [EP_MAC_TX_MON1] [uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon] ep_pipe_tx_item written to mac_sb_ep_tx_port successfully. TxData='{401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165}, size=8, time=70000720
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(355) @ 70000720: uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon [EP_MAC_TX_MON] [uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon] PIPE TxData CAPTURED '{401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165} size=8 time=            70000720
+# UVM_INFO ../agents/PCIe_PMA_Monitor.sv(235) @ 70000720: uvm_test_top.EP_Env_0.TX_PMA_Agnt.PCIe_PMA_mon [PMA_RX_MON] [uvm_test_top.EP_Env_0.TX_PMA_Agnt.PCIe_PMA_mon] RX packet captured on PMA lanes, forwarded to PMA TX path
+# UVM_INFO ../agents/PCIe_PMA_Driver.sv(130) @ 70000720: uvm_test_top.EP_Env_0.TX_PMA_Agnt.PCIe_PMA_drv [PMA_RX_DRV] [uvm_test_top.EP_Env_0.TX_PMA_Agnt.PCIe_PMA_drv] RX packet received on PMA MAC lanes
+# UVM_INFO ../env/MAC_SB.sv(47) @ 70001040: uvm_test_top.mac_scb [MAC_SB_RC_TX] Received RC_TX packet. Queue size(before push)=0, Data='{401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165}, Time=70001040
+# UVM_INFO ../env/MAC_SB.sv(56) @ 70001040: uvm_test_top.mac_scb [RC_TX] RC_TX Count=2 Queue=1
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(286) @ 70001040: uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon [RC_MAC_TX_MON1] rc_pipe_tx_item written to mac_sb_rc_tx_port successfully. pma_rc_tx_q='{401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165}, size=16, time=70001040
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(293) @ 70001040: uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon [RC_MAC_TX_MON] [uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon] PIPE TxData CAPTURED '{401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165} size=16 time=            70001040
+# UVM_INFO ../agents/PCIe_PMA_Monitor.sv(123) @ 70001040: uvm_test_top.RC_Env_0.TX_PMA_Agnt.PCIe_PMA_mon [PMA_TX_MON] [uvm_test_top.RC_Env_0.TX_PMA_Agnt.PCIe_PMA_mon] TX packet captured on PMA lanes, forwarded to PMA RX path
+# UVM_INFO ../agents/PCIe_PMA_Driver.sv(98) @ 70001040: uvm_test_top.RC_Env_0.TX_PMA_Agnt.PCIe_PMA_drv [PMA_TX_DRV] [uvm_test_top.RC_Env_0.TX_PMA_Agnt.PCIe_PMA_drv] Driving TX packet onto PMA lanes
+# lane 0 data = '{401426834444944475808459444420780836165} size 1
+# lane 0 data = '{401426834444944475808459444420780836165, 401426834444944475808459444420780836165} size 2
+# lane 0 data = '{401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165} size 3
+# lane 0 data = '{401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165} size 4
+# lane 0 data = '{401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165} size 5
+# lane 0 data = '{401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165} size 6
+# lane 0 data = '{401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165} size 7
+# UVM_INFO ../agents/PCIe_PMA_Monitor.sv(179) @ 70004882: uvm_test_top.RC_Env_0.TX_PMA_Agnt.PCIe_PMA_mon [PMA_TX_MON] [uvm_test_top.RC_Env_0.TX_PMA_Agnt.PCIe_PMA_mon] TX packet reassembled from PMA lanes, forwarded to MAC layer
+# UVM_INFO ../agents/PCIe_PMA_Driver.sv(112) @ 70004882: uvm_test_top.RC_Env_0.TX_PMA_Agnt.PCIe_PMA_drv [PMA_TX_DRV] [uvm_test_top.RC_Env_0.TX_PMA_Agnt.PCIe_PMA_drv] Driving TX packet onto PMA MAC lanes
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(628) @ 70004920: uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon [MAC_TX] Packet Sent lane0 2dffff000100002d2d2d2d2d2d2d4545
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(628) @ 70004960: uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon [MAC_TX] Packet Sent lane0 2dffff000100002d2d2d2d2d2d2d4545
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(628) @ 70005000: uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon [MAC_TX] Packet Sent lane0 2dffff000100002d2d2d2d2d2d2d4545
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(628) @ 70005040: uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon [MAC_TX] Packet Sent lane0 2dffff000100002d2d2d2d2d2d2d4545
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(628) @ 70005080: uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon [MAC_TX] Packet Sent lane0 2dffff000100002d2d2d2d2d2d2d4545
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(628) @ 70005120: uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon [MAC_TX] Packet Sent lane0 2dffff000100002d2d2d2d2d2d2d4545
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(628) @ 70005160: uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon [MAC_TX] Packet Sent lane0 2dffff000100002d2d2d2d2d2d2d4545
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(628) @ 70005200: uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon [MAC_TX] Packet Sent lane0 2dffff000100002d2d2d2d2d2d2d4545
+# lane 0 data = '{401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165} size 8
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(770) @ 70005240: uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon [MAC_TX_MON] [uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon] RC MAC packet forwarded to RX path: tlp_queue=0 dlp_queue=0
+# UVM_INFO ../env/MAC_SB.sv(103) @ 70005240: uvm_test_top.mac_scb [MAC_SB_RC_RX] Received RC_RX packet. Queue size(before push)=0, Data='{401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165}, Time=70005240
+# UVM_INFO ../env/MAC_SB.sv(112) @ 70005240: uvm_test_top.mac_scb [RC_RX] RC_RX Count=2 Queue=1
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(316) @ 70005240: uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon [RC_MAC_RX_MON1] [uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon] rc_pipe_rx_item written to mac_sb_rc_rx_port successfully. RxData='{401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165}, queue_size=8, time=70005240
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(324) @ 70005240: uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon [RC_MAC_RX_MON] [uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon] PIPE RxData CAPTURED '{401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165} queue_size=8 time=            70005240
+# UVM_INFO ../agents/PCIe_MAC_Driver.sv(1635) @ 70005240: uvm_test_top.RC_Env_0.TX_MAC_Agnt.drv [MAC_TX_DRV] wait_completed RC_ORDERED_SETS 0 DWORDs
+# UVM_INFO ../env/MAC_SB.sv(162) @ 70005240: uvm_test_top.mac_scb [CPL_CHECK] Before pop: EP_TX_Q=1 RC_RX_Q=1
+# UVM_INFO ../env/MAC_SB.sv(170) @ 70005240: uvm_test_top.mac_scb [CPL_CHECK] Comparing EP_TX(size=8) with RC_RX(size=8)
+# UVM_INFO ../env/MAC_SB.sv(230) @ 70005240: uvm_test_top.mac_scb [MAC_SB_COMPARE2] Index=0  EP_TX=12dffff000100002d2d2d2d2d2d2d4545  RC_RX=12dffff000100002d2d2d2d2d2d2d4545
+# UVM_INFO ../env/MAC_SB.sv(230) @ 70005240: uvm_test_top.mac_scb [MAC_SB_COMPARE2] Index=1  EP_TX=12dffff000100002d2d2d2d2d2d2d4545  RC_RX=12dffff000100002d2d2d2d2d2d2d4545
+# UVM_INFO ../env/MAC_SB.sv(230) @ 70005240: uvm_test_top.mac_scb [MAC_SB_COMPARE2] Index=2  EP_TX=12dffff000100002d2d2d2d2d2d2d4545  RC_RX=12dffff000100002d2d2d2d2d2d2d4545
+# UVM_INFO ../env/MAC_SB.sv(230) @ 70005240: uvm_test_top.mac_scb [MAC_SB_COMPARE2] Index=3  EP_TX=12dffff000100002d2d2d2d2d2d2d4545  RC_RX=12dffff000100002d2d2d2d2d2d2d4545
+# UVM_INFO ../env/MAC_SB.sv(230) @ 70005240: uvm_test_top.mac_scb [MAC_SB_COMPARE2] Index=4  EP_TX=12dffff000100002d2d2d2d2d2d2d4545  RC_RX=12dffff000100002d2d2d2d2d2d2d4545
+# UVM_INFO ../env/MAC_SB.sv(230) @ 70005240: uvm_test_top.mac_scb [MAC_SB_COMPARE2] Index=5  EP_TX=12dffff000100002d2d2d2d2d2d2d4545  RC_RX=12dffff000100002d2d2d2d2d2d2d4545
+# UVM_INFO ../env/MAC_SB.sv(230) @ 70005240: uvm_test_top.mac_scb [MAC_SB_COMPARE2] Index=6  EP_TX=12dffff000100002d2d2d2d2d2d2d4545  RC_RX=12dffff000100002d2d2d2d2d2d2d4545
+# UVM_INFO ../env/MAC_SB.sv(230) @ 70005240: uvm_test_top.mac_scb [MAC_SB_COMPARE2] Index=7  EP_TX=12dffff000100002d2d2d2d2d2d2d4545  RC_RX=12dffff000100002d2d2d2d2d2d2d4545
+# UVM_INFO ../env/MAC_SB.sv(248) @ 70005240: uvm_test_top.mac_scb [MAC_SB_COMPLETION_PASS] [COMPLETION] MATCH (pass cnt=3) EP_TX='{401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165} RC_RX='{401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165}
+# lane 0 data = '{401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165} size 9
+# lane 0 data = '{401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165} size 10
+# lane 0 data = '{401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165} size 11
+# lane 0 data = '{401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165} size 12
+# lane 0 data = '{401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165} size 13
+# lane 0 data = '{401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165} size 14
+# lane 0 data = '{401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165} size 15
+# lane 0 data = '{401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165} size 16
+# UVM_INFO ../agents/PCIe_PMA_Monitor.sv(294) @ 70009362: uvm_test_top.EP_Env_0.TX_PMA_Agnt.PCIe_PMA_mon [PMA_RX_MON] [uvm_test_top.EP_Env_0.TX_PMA_Agnt.PCIe_PMA_mon] RX packet reassembled from PMA lanes, forwarded to MAC layer
+# UVM_INFO ../agents/PCIe_PMA_Driver.sv(121) @ 70009362: uvm_test_top.EP_Env_0.TX_PMA_Agnt.PCIe_PMA_drv [PMA_RX_DRV] [uvm_test_top.EP_Env_0.TX_PMA_Agnt.PCIe_PMA_drv] RX packet received on PMA lanes
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(1033) @ 70010040: uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon [MAC_RX_MON] [uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon] EP MAC packet forwarded to RX path: tlp_queue=0 dlp_queue=0
+# UVM_INFO ../env/MAC_SB.sv(65) @ 70010040: uvm_test_top.mac_scb [MAC_SB_EP_RX] Received EP_RX packet. Queue size(before push)=0, Data='{401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165}, Time=70010040
+# UVM_INFO ../env/MAC_SB.sv(74) @ 70010040: uvm_test_top.mac_scb [EP_RX] EP_RX Count=2 Queue=1
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(377) @ 70010040: uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon [EP_MAC_RX_MON1] [uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon] ep_pipe_rx_item written to mac_sb_ep_rx_port successfully. RxData='{401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165}, queue_size=16, time=70010040
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(385) @ 70010040: uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon [EP_MAC_RX_MON] [uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon] PIPE RxData CAPTURED '{401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165} queue_size=16 time=            70010040
+# UVM_INFO ../agents/PCIe_MAC_Driver.sv(1729) @ 70010040: uvm_test_top.EP_Env_0.TX_MAC_Agnt.drv [MAC_TX_DRV] wait_completed EP_ORDERED_SETS 0 DWORDs
+# UVM_INFO ../env/MAC_SB.sv(137) @ 70010040: uvm_test_top.mac_scb [REQ_CHECK] Before pop: RC_TX_Q=1 EP_RX_Q=1
+# UVM_INFO ../env/MAC_SB.sv(145) @ 70010040: uvm_test_top.mac_scb [REQ_CHECK] Comparing RC_TX(size=16) with EP_RX(size=16)
+# UVM_INFO ../env/MAC_SB.sv(187) @ 70010040: uvm_test_top.mac_scb [MAC_SB_COMPARE1] Index=0  TX=12dffff000100002d2d2d2d2d2d2d4545  RX=12dffff000100002d2d2d2d2d2d2d4545
+# UVM_INFO ../env/MAC_SB.sv(187) @ 70010040: uvm_test_top.mac_scb [MAC_SB_COMPARE1] Index=1  TX=12dffff000100002d2d2d2d2d2d2d4545  RX=12dffff000100002d2d2d2d2d2d2d4545
+# UVM_INFO ../env/MAC_SB.sv(187) @ 70010040: uvm_test_top.mac_scb [MAC_SB_COMPARE1] Index=2  TX=12dffff000100002d2d2d2d2d2d2d4545  RX=12dffff000100002d2d2d2d2d2d2d4545
+# UVM_INFO ../env/MAC_SB.sv(187) @ 70010040: uvm_test_top.mac_scb [MAC_SB_COMPARE1] Index=3  TX=12dffff000100002d2d2d2d2d2d2d4545  RX=12dffff000100002d2d2d2d2d2d2d4545
+# UVM_INFO ../env/MAC_SB.sv(187) @ 70010040: uvm_test_top.mac_scb [MAC_SB_COMPARE1] Index=4  TX=12dffff000100002d2d2d2d2d2d2d4545  RX=12dffff000100002d2d2d2d2d2d2d4545
+# UVM_INFO ../env/MAC_SB.sv(187) @ 70010040: uvm_test_top.mac_scb [MAC_SB_COMPARE1] Index=5  TX=12dffff000100002d2d2d2d2d2d2d4545  RX=12dffff000100002d2d2d2d2d2d2d4545
+# UVM_INFO ../env/MAC_SB.sv(187) @ 70010040: uvm_test_top.mac_scb [MAC_SB_COMPARE1] Index=6  TX=12dffff000100002d2d2d2d2d2d2d4545  RX=12dffff000100002d2d2d2d2d2d2d4545
+# UVM_INFO ../env/MAC_SB.sv(187) @ 70010040: uvm_test_top.mac_scb [MAC_SB_COMPARE1] Index=7  TX=12dffff000100002d2d2d2d2d2d2d4545  RX=12dffff000100002d2d2d2d2d2d2d4545
+# UVM_INFO ../env/MAC_SB.sv(187) @ 70010040: uvm_test_top.mac_scb [MAC_SB_COMPARE1] Index=8  TX=12dffff000100002d2d2d2d2d2d2d4545  RX=12dffff000100002d2d2d2d2d2d2d4545
+# UVM_INFO ../env/MAC_SB.sv(187) @ 70010040: uvm_test_top.mac_scb [MAC_SB_COMPARE1] Index=9  TX=12dffff000100002d2d2d2d2d2d2d4545  RX=12dffff000100002d2d2d2d2d2d2d4545
+# UVM_INFO ../env/MAC_SB.sv(187) @ 70010040: uvm_test_top.mac_scb [MAC_SB_COMPARE1] Index=10  TX=12dffff000100002d2d2d2d2d2d2d4545  RX=12dffff000100002d2d2d2d2d2d2d4545
+# UVM_INFO ../env/MAC_SB.sv(187) @ 70010040: uvm_test_top.mac_scb [MAC_SB_COMPARE1] Index=11  TX=12dffff000100002d2d2d2d2d2d2d4545  RX=12dffff000100002d2d2d2d2d2d2d4545
+# UVM_INFO ../env/MAC_SB.sv(187) @ 70010040: uvm_test_top.mac_scb [MAC_SB_COMPARE1] Index=12  TX=12dffff000100002d2d2d2d2d2d2d4545  RX=12dffff000100002d2d2d2d2d2d2d4545
+# UVM_INFO ../env/MAC_SB.sv(187) @ 70010040: uvm_test_top.mac_scb [MAC_SB_COMPARE1] Index=13  TX=12dffff000100002d2d2d2d2d2d2d4545  RX=12dffff000100002d2d2d2d2d2d2d4545
+# UVM_INFO ../env/MAC_SB.sv(187) @ 70010040: uvm_test_top.mac_scb [MAC_SB_COMPARE1] Index=14  TX=12dffff000100002d2d2d2d2d2d2d4545  RX=12dffff000100002d2d2d2d2d2d2d4545
+# UVM_INFO ../env/MAC_SB.sv(187) @ 70010040: uvm_test_top.mac_scb [MAC_SB_COMPARE1] Index=15  TX=12dffff000100002d2d2d2d2d2d2d4545  RX=12dffff000100002d2d2d2d2d2d2d4545
+# UVM_INFO ../env/MAC_SB.sv(204) @ 70010040: uvm_test_top.mac_scb [MAC_SB_REQUEST_PASS] [REQUEST] MATCH (pass cnt=4) TX='{401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165} RX='{401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165, 401426834444944475808459444420780836165}
+# UVM_INFO ../agents/PCIe_MAC_Driver.sv(1752) @ 190000340: uvm_test_top.EP_Env_0.TX_MAC_Agnt.drv [TX_LTSSM] EP: 8 consecutive TS2 (PAD) received + 16 TS2 sent after first RX -> CONFIG_LINKNUM_START
+# UVM_INFO ../agents/PCIe_MAC_Driver.sv(1873) @ 190000340: uvm_test_top.EP_Env_0.TX_MAC_Agnt.drv [RX_LTSSM] Link Disable bit set prior to entry -> immediate DISABLED
+# UVM_INFO ../agents/PCIe_MAC_Driver.sv(3875) @ 190000340: uvm_test_top.EP_Env_0.TX_MAC_Agnt.drv [RX_LTSSM] Entered DISABLED - broadcasting TS1 with Disable Link asserted
+# UVM_INFO ../agents/PCIe_MAC_Driver.sv(1659) @ 190000340: uvm_test_top.RC_Env_0.TX_MAC_Agnt.drv [TX_LTSSM] 8 consecutive TS2 (PAD) received + 16 TS2 sent after first RX -> CONFIG_LINKNUM_START
+# UVM_INFO ../agents/PCIe_MAC_Driver.sv(1775) @ 190000340: uvm_test_top.RC_Env_0.TX_MAC_Agnt.drv [TX_LTSSM] Link Disable bit set prior to entry -> immediate DISABLED
+# UVM_INFO ../agents/PCIe_MAC_Driver.sv(3828) @ 190000340: uvm_test_top.RC_Env_0.TX_MAC_Agnt.drv [TX_LTSSM] Entered DISABLED - broadcasting TS1 with Disable Link asserted
+# UVM_INFO ../env/MAC_SB.sv(85) @ 190001040: uvm_test_top.mac_scb [MAC_SB_EP_TX] Received EP_TX packet. Queue size(before push)=0, Data='{381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362}, Time=190001040
+# UVM_INFO ../env/MAC_SB.sv(94) @ 190001040: uvm_test_top.mac_scb [EP_TX] EP_TX Count=3 Queue=1
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(347) @ 190001040: uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon [EP_MAC_TX_MON1] [uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon] ep_pipe_tx_item written to mac_sb_ep_tx_port successfully. TxData='{381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362}, size=16, time=190001040
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(355) @ 190001040: uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon [EP_MAC_TX_MON] [uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon] PIPE TxData CAPTURED '{381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362} size=16 time=           190001040
+# UVM_INFO ../env/MAC_SB.sv(47) @ 190001040: uvm_test_top.mac_scb [MAC_SB_RC_TX] Received RC_TX packet. Queue size(before push)=0, Data='{381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362}, Time=190001040
+# UVM_INFO ../env/MAC_SB.sv(56) @ 190001040: uvm_test_top.mac_scb [RC_TX] RC_TX Count=3 Queue=1
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(286) @ 190001040: uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon [RC_MAC_TX_MON1] rc_pipe_tx_item written to mac_sb_rc_tx_port successfully. pma_rc_tx_q='{381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362}, size=16, time=190001040
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(293) @ 190001040: uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon [RC_MAC_TX_MON] [uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon] PIPE TxData CAPTURED '{381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362} size=16 time=           190001040
+# UVM_INFO ../agents/PCIe_PMA_Monitor.sv(235) @ 190001040: uvm_test_top.EP_Env_0.TX_PMA_Agnt.PCIe_PMA_mon [PMA_RX_MON] [uvm_test_top.EP_Env_0.TX_PMA_Agnt.PCIe_PMA_mon] RX packet captured on PMA lanes, forwarded to PMA TX path
+# UVM_INFO ../agents/PCIe_PMA_Driver.sv(130) @ 190001040: uvm_test_top.EP_Env_0.TX_PMA_Agnt.PCIe_PMA_drv [PMA_RX_DRV] [uvm_test_top.EP_Env_0.TX_PMA_Agnt.PCIe_PMA_drv] RX packet received on PMA MAC lanes
+# UVM_INFO ../agents/PCIe_PMA_Monitor.sv(123) @ 190001040: uvm_test_top.RC_Env_0.TX_PMA_Agnt.PCIe_PMA_mon [PMA_TX_MON] [uvm_test_top.RC_Env_0.TX_PMA_Agnt.PCIe_PMA_mon] TX packet captured on PMA lanes, forwarded to PMA RX path
+# UVM_INFO ../agents/PCIe_PMA_Driver.sv(98) @ 190001040: uvm_test_top.RC_Env_0.TX_PMA_Agnt.PCIe_PMA_drv [PMA_TX_DRV] [uvm_test_top.RC_Env_0.TX_PMA_Agnt.PCIe_PMA_drv] Driving TX packet onto PMA lanes
+# lane 0 data = '{381483242493724223557224703245907020362} size 1
+# lane 0 data = '{381483242493724223557224703245907020362, 381483242493724223557224703245907020362} size 2
+# lane 0 data = '{381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362} size 3
+# lane 0 data = '{381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362} size 4
+# lane 0 data = '{381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362} size 5
+# lane 0 data = '{381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362} size 6
+# lane 0 data = '{381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362} size 7
+# lane 0 data = '{381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362} size 8
+# lane 0 data = '{381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362} size 9
+# lane 0 data = '{381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362} size 10
+# lane 0 data = '{381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362} size 11
+# lane 0 data = '{381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362} size 12
+# lane 0 data = '{381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362} size 13
+# lane 0 data = '{381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362} size 14
+# lane 0 data = '{381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362} size 15
+# UVM_INFO ../agents/PCIe_PMA_Monitor.sv(179) @ 190009362: uvm_test_top.RC_Env_0.TX_PMA_Agnt.PCIe_PMA_mon [PMA_TX_MON] [uvm_test_top.RC_Env_0.TX_PMA_Agnt.PCIe_PMA_mon] TX packet reassembled from PMA lanes, forwarded to MAC layer
+# UVM_INFO ../agents/PCIe_PMA_Driver.sv(112) @ 190009362: uvm_test_top.RC_Env_0.TX_PMA_Agnt.PCIe_PMA_drv [PMA_TX_DRV] [uvm_test_top.RC_Env_0.TX_PMA_Agnt.PCIe_PMA_drv] Driving TX packet onto PMA MAC lanes
+# lane 0 data = '{381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362} size 16
+# UVM_INFO ../agents/PCIe_PMA_Monitor.sv(294) @ 190009362: uvm_test_top.EP_Env_0.TX_PMA_Agnt.PCIe_PMA_mon [PMA_RX_MON] [uvm_test_top.EP_Env_0.TX_PMA_Agnt.PCIe_PMA_mon] RX packet reassembled from PMA lanes, forwarded to MAC layer
+# UVM_INFO ../agents/PCIe_PMA_Driver.sv(121) @ 190009362: uvm_test_top.EP_Env_0.TX_PMA_Agnt.PCIe_PMA_drv [PMA_RX_DRV] [uvm_test_top.EP_Env_0.TX_PMA_Agnt.PCIe_PMA_drv] RX packet received on PMA lanes
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(891) @ 190009400: uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon [MAC_RX] EP_ORDERSETS lane0 1eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(622) @ 190009400: uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon [MAC_TX] Packet Sent lane0 1eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(891) @ 190009440: uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon [MAC_RX] EP_ORDERSETS lane0 1eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(622) @ 190009440: uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon [MAC_TX] Packet Sent lane0 1eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(891) @ 190009480: uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon [MAC_RX] EP_ORDERSETS lane0 1eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(622) @ 190009480: uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon [MAC_TX] Packet Sent lane0 1eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(891) @ 190009520: uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon [MAC_RX] EP_ORDERSETS lane0 1eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(622) @ 190009520: uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon [MAC_TX] Packet Sent lane0 1eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(891) @ 190009560: uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon [MAC_RX] EP_ORDERSETS lane0 1eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(622) @ 190009560: uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon [MAC_TX] Packet Sent lane0 1eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(891) @ 190009600: uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon [MAC_RX] EP_ORDERSETS lane0 1eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(622) @ 190009600: uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon [MAC_TX] Packet Sent lane0 1eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(891) @ 190009640: uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon [MAC_RX] EP_ORDERSETS lane0 1eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(622) @ 190009640: uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon [MAC_TX] Packet Sent lane0 1eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(891) @ 190009680: uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon [MAC_RX] EP_ORDERSETS lane0 1eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(622) @ 190009680: uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon [MAC_TX] Packet Sent lane0 1eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(891) @ 190009720: uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon [MAC_RX] EP_ORDERSETS lane0 1eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(622) @ 190009720: uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon [MAC_TX] Packet Sent lane0 1eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(891) @ 190009760: uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon [MAC_RX] EP_ORDERSETS lane0 1eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(622) @ 190009760: uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon [MAC_TX] Packet Sent lane0 1eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(891) @ 190009800: uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon [MAC_RX] EP_ORDERSETS lane0 1eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(622) @ 190009800: uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon [MAC_TX] Packet Sent lane0 1eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(891) @ 190009840: uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon [MAC_RX] EP_ORDERSETS lane0 1eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(622) @ 190009840: uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon [MAC_TX] Packet Sent lane0 1eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(891) @ 190009880: uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon [MAC_RX] EP_ORDERSETS lane0 1eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(622) @ 190009880: uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon [MAC_TX] Packet Sent lane0 1eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(891) @ 190009920: uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon [MAC_RX] EP_ORDERSETS lane0 1eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(622) @ 190009920: uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon [MAC_TX] Packet Sent lane0 1eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(891) @ 190009960: uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon [MAC_RX] EP_ORDERSETS lane0 1eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(622) @ 190009960: uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon [MAC_TX] Packet Sent lane0 1eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(891) @ 190010000: uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon [MAC_RX] EP_ORDERSETS lane0 1eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(622) @ 190010000: uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon [MAC_TX] Packet Sent lane0 1eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(1033) @ 190010040: uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon [MAC_RX_MON] [uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon] EP MAC packet forwarded to RX path: tlp_queue=0 dlp_queue=0
+# UVM_INFO ../env/MAC_SB.sv(65) @ 190010040: uvm_test_top.mac_scb [MAC_SB_EP_RX] Received EP_RX packet. Queue size(before push)=0, Data='{381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362}, Time=190010040
+# UVM_INFO ../env/MAC_SB.sv(74) @ 190010040: uvm_test_top.mac_scb [EP_RX] EP_RX Count=3 Queue=1
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(377) @ 190010040: uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon [EP_MAC_RX_MON1] [uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon] ep_pipe_rx_item written to mac_sb_ep_rx_port successfully. RxData='{381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362}, queue_size=16, time=190010040
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(385) @ 190010040: uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon [EP_MAC_RX_MON] [uvm_test_top.EP_Env_0.TX_MAC_Agnt.mon] PIPE RxData CAPTURED '{381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362} queue_size=16 time=           190010040
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(770) @ 190010040: uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon [MAC_TX_MON] [uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon] RC MAC packet forwarded to RX path: tlp_queue=0 dlp_queue=0
+# UVM_INFO ../env/MAC_SB.sv(103) @ 190010040: uvm_test_top.mac_scb [MAC_SB_RC_RX] Received RC_RX packet. Queue size(before push)=0, Data='{381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362}, Time=190010040
+# UVM_INFO ../env/MAC_SB.sv(112) @ 190010040: uvm_test_top.mac_scb [RC_RX] RC_RX Count=3 Queue=1
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(316) @ 190010040: uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon [RC_MAC_RX_MON1] [uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon] rc_pipe_rx_item written to mac_sb_rc_rx_port successfully. RxData='{381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362}, queue_size=16, time=190010040
+# UVM_INFO ../agents/PCIe_MAC_Monitor.sv(324) @ 190010040: uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon [RC_MAC_RX_MON] [uvm_test_top.RC_Env_0.TX_MAC_Agnt.mon] PIPE RxData CAPTURED '{381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362} queue_size=16 time=           190010040
+# UVM_INFO ../env/MAC_SB.sv(137) @ 190010040: uvm_test_top.mac_scb [REQ_CHECK] Before pop: RC_TX_Q=1 EP_RX_Q=1
+# UVM_INFO ../env/MAC_SB.sv(145) @ 190010040: uvm_test_top.mac_scb [REQ_CHECK] Comparing RC_TX(size=16) with EP_RX(size=16)
+# UVM_INFO ../env/MAC_SB.sv(187) @ 190010040: uvm_test_top.mac_scb [MAC_SB_COMPARE1] Index=0  TX=11eff00000102000000001e1e1e1e4a4a  RX=11eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(187) @ 190010040: uvm_test_top.mac_scb [MAC_SB_COMPARE1] Index=1  TX=11eff00000102000000001e1e1e1e4a4a  RX=11eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(187) @ 190010040: uvm_test_top.mac_scb [MAC_SB_COMPARE1] Index=2  TX=11eff00000102000000001e1e1e1e4a4a  RX=11eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(187) @ 190010040: uvm_test_top.mac_scb [MAC_SB_COMPARE1] Index=3  TX=11eff00000102000000001e1e1e1e4a4a  RX=11eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(187) @ 190010040: uvm_test_top.mac_scb [MAC_SB_COMPARE1] Index=4  TX=11eff00000102000000001e1e1e1e4a4a  RX=11eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(187) @ 190010040: uvm_test_top.mac_scb [MAC_SB_COMPARE1] Index=5  TX=11eff00000102000000001e1e1e1e4a4a  RX=11eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(187) @ 190010040: uvm_test_top.mac_scb [MAC_SB_COMPARE1] Index=6  TX=11eff00000102000000001e1e1e1e4a4a  RX=11eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(187) @ 190010040: uvm_test_top.mac_scb [MAC_SB_COMPARE1] Index=7  TX=11eff00000102000000001e1e1e1e4a4a  RX=11eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(187) @ 190010040: uvm_test_top.mac_scb [MAC_SB_COMPARE1] Index=8  TX=11eff00000102000000001e1e1e1e4a4a  RX=11eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(187) @ 190010040: uvm_test_top.mac_scb [MAC_SB_COMPARE1] Index=9  TX=11eff00000102000000001e1e1e1e4a4a  RX=11eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(187) @ 190010040: uvm_test_top.mac_scb [MAC_SB_COMPARE1] Index=10  TX=11eff00000102000000001e1e1e1e4a4a  RX=11eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(187) @ 190010040: uvm_test_top.mac_scb [MAC_SB_COMPARE1] Index=11  TX=11eff00000102000000001e1e1e1e4a4a  RX=11eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(187) @ 190010040: uvm_test_top.mac_scb [MAC_SB_COMPARE1] Index=12  TX=11eff00000102000000001e1e1e1e4a4a  RX=11eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(187) @ 190010040: uvm_test_top.mac_scb [MAC_SB_COMPARE1] Index=13  TX=11eff00000102000000001e1e1e1e4a4a  RX=11eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(187) @ 190010040: uvm_test_top.mac_scb [MAC_SB_COMPARE1] Index=14  TX=11eff00000102000000001e1e1e1e4a4a  RX=11eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(187) @ 190010040: uvm_test_top.mac_scb [MAC_SB_COMPARE1] Index=15  TX=11eff00000102000000001e1e1e1e4a4a  RX=11eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(204) @ 190010040: uvm_test_top.mac_scb [MAC_SB_REQUEST_PASS] [REQUEST] MATCH (pass cnt=5) TX='{381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362} RX='{381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362}
+# UVM_INFO ../env/MAC_SB.sv(162) @ 190010040: uvm_test_top.mac_scb [CPL_CHECK] Before pop: EP_TX_Q=1 RC_RX_Q=1
+# UVM_INFO ../env/MAC_SB.sv(170) @ 190010040: uvm_test_top.mac_scb [CPL_CHECK] Comparing EP_TX(size=16) with RC_RX(size=16)
+# UVM_INFO ../env/MAC_SB.sv(230) @ 190010040: uvm_test_top.mac_scb [MAC_SB_COMPARE2] Index=0  EP_TX=11eff00000102000000001e1e1e1e4a4a  RC_RX=11eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(230) @ 190010040: uvm_test_top.mac_scb [MAC_SB_COMPARE2] Index=1  EP_TX=11eff00000102000000001e1e1e1e4a4a  RC_RX=11eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(230) @ 190010040: uvm_test_top.mac_scb [MAC_SB_COMPARE2] Index=2  EP_TX=11eff00000102000000001e1e1e1e4a4a  RC_RX=11eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(230) @ 190010040: uvm_test_top.mac_scb [MAC_SB_COMPARE2] Index=3  EP_TX=11eff00000102000000001e1e1e1e4a4a  RC_RX=11eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(230) @ 190010040: uvm_test_top.mac_scb [MAC_SB_COMPARE2] Index=4  EP_TX=11eff00000102000000001e1e1e1e4a4a  RC_RX=11eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(230) @ 190010040: uvm_test_top.mac_scb [MAC_SB_COMPARE2] Index=5  EP_TX=11eff00000102000000001e1e1e1e4a4a  RC_RX=11eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(230) @ 190010040: uvm_test_top.mac_scb [MAC_SB_COMPARE2] Index=6  EP_TX=11eff00000102000000001e1e1e1e4a4a  RC_RX=11eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(230) @ 190010040: uvm_test_top.mac_scb [MAC_SB_COMPARE2] Index=7  EP_TX=11eff00000102000000001e1e1e1e4a4a  RC_RX=11eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(230) @ 190010040: uvm_test_top.mac_scb [MAC_SB_COMPARE2] Index=8  EP_TX=11eff00000102000000001e1e1e1e4a4a  RC_RX=11eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(230) @ 190010040: uvm_test_top.mac_scb [MAC_SB_COMPARE2] Index=9  EP_TX=11eff00000102000000001e1e1e1e4a4a  RC_RX=11eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(230) @ 190010040: uvm_test_top.mac_scb [MAC_SB_COMPARE2] Index=10  EP_TX=11eff00000102000000001e1e1e1e4a4a  RC_RX=11eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(230) @ 190010040: uvm_test_top.mac_scb [MAC_SB_COMPARE2] Index=11  EP_TX=11eff00000102000000001e1e1e1e4a4a  RC_RX=11eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(230) @ 190010040: uvm_test_top.mac_scb [MAC_SB_COMPARE2] Index=12  EP_TX=11eff00000102000000001e1e1e1e4a4a  RC_RX=11eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(230) @ 190010040: uvm_test_top.mac_scb [MAC_SB_COMPARE2] Index=13  EP_TX=11eff00000102000000001e1e1e1e4a4a  RC_RX=11eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(230) @ 190010040: uvm_test_top.mac_scb [MAC_SB_COMPARE2] Index=14  EP_TX=11eff00000102000000001e1e1e1e4a4a  RC_RX=11eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(230) @ 190010040: uvm_test_top.mac_scb [MAC_SB_COMPARE2] Index=15  EP_TX=11eff00000102000000001e1e1e1e4a4a  RC_RX=11eff00000102000000001e1e1e1e4a4a
+# UVM_INFO ../env/MAC_SB.sv(248) @ 190010040: uvm_test_top.mac_scb [MAC_SB_COMPLETION_PASS] [COMPLETION] MATCH (pass cnt=6) EP_TX='{381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362} RC_RX='{381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362, 381483242493724223557224703245907020362}
+# UVM_INFO ../tests/Test.sv(1010) @ 360100000: uvm_test_top [TEST] DISABLED functionality complete -> ending test
+# UVM_INFO verilog_src/uvm-1.1d/src/base/uvm_objection.svh(1267) @ 360100000: reporter [TEST_DONE] 'run' phase is ready to proceed to the 'extract' phase
+# UVM_INFO ../env/Scoreboard_Top.sv(327) @ 360100000: uvm_test_top.Top_Scb [MEM_MODEL] FINAL MEM SCOREBOARD RESULT: mem_pass_cnt=0 mem_fail_cnt=0
+# UVM_INFO ../env/MAC_SB.sv(267) @ 360100000: uvm_test_top.mac_scb [SB12] PCIe_MAC_Scoreboard FINAL RESULT: pass=6 fail=0
+# UVM_INFO ../env/MAC_SB.sv(271) @ 360100000: uvm_test_top.mac_scb [SB_REPORT] 
+# 
+# 
+# RC_TX Transactions = 3
+# 
+# 
+# EP_RX Transactions = 3
+# 
+# 
+# EP_TX Transactions = 3
+# 
+# 
+# RC_RX Transactions = 3
+# 
+# 
+# PASS = 6
+# 
+# 
+# FAIL = 0
+# UVM_INFO ../env/pcie_cov.sv(216) @ 360100000: uvm_test_top.pcie_cov [PCIe_TL_Coverage] TLP_cg coverage = 0.00%
+# 
+# --- UVM Report Summary ---
+# 
+# ** Report counts by severity
+# UVM_INFO :  278
+# UVM_WARNING :    0
+# UVM_ERROR :    0
+# UVM_FATAL :    0
+# ** Report counts by id
+# [CPL_CHECK]     6
+# [EP_MAC_RX_MON]     3
+# [EP_MAC_RX_MON1]     3
+# [EP_MAC_TX_MON]     3
+# [EP_MAC_TX_MON1]     3
+# [EP_RX]     3
+# [EP_TX]     3
+# [Env_Top]     4
+# [INIT]     2
+# [MAC_RX]    26
+# [MAC_RX_MON]     3
+# [MAC_SB_COMPARE1]    42
+# [MAC_SB_COMPARE2]    32
+# [MAC_SB_COMPLETION_PASS]     3
+# [MAC_SB_EP_RX]     3
+# [MAC_SB_EP_TX]     3
+# [MAC_SB_RC_RX]     3
+# [MAC_SB_RC_TX]     3
+# [MAC_SB_REQUEST_PASS]     3
+# [MAC_TX]    32
+# [MAC_TX_DRV]     4
+# [MAC_TX_MON]     3
+# [MEM_MODEL]     1
+# [PCIe_TL_Coverage]     1
+# [PMA_RX_DRV]     6
+# [PMA_RX_MON]     6
+# [PMA_TX_DRV]     6
+# [PMA_TX_MON]     6
+# [RC_MAC_RX_MON]     3
+# [RC_MAC_RX_MON1]     3
+# [RC_MAC_TX_MON]     3
+# [RC_MAC_TX_MON1]     3
+# [RC_RX]     3
+# [RC_TX]     3
+# [REQ_CHECK]     6
+# [RNTST]     1
+# [RX_LTSSM]     8
+# [RX_PCIe_LUT]     4
+# [RX_TL_MONITOR]     2
+# [RX_TL_Monitor]     1
+# [SB12]     1
+# [SB_REPORT]     1
+# [TEST]     2
+# [TEST_DONE]     1
+# [TX_LTSSM]    13
+# [TX_TL_Monitor]     3
+# [UVMTOP]     1
+# ** Note: $finish    : C:/questasim64_2025.2_1/win64/../verilog_src/uvm-1.1d/src/base/uvm_root.svh(430)
+#    Time: 36010 us  Iteration: 54  Instance: /PCIe_top
+# Saving coverage database on exit...
+# End time: 13:52:04 on Aug 28,2026, Elapsed time: 0:07:18
+# Errors: 0, Warnings: 14

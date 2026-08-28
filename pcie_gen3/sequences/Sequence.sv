@@ -536,3 +536,82 @@ class Sequence_rx extends uvm_sequence #(Sequence_item);
   endtask
   
 endclass : Sequence_rx
+
+
+//-----------------------------------------------------------------
+// Error_Inject_Seq
+//   One general-purpose sequence used by every TL-layer negative
+//   test in tests/Error_Tests.sv. It builds exactly one TL request
+//   of the requested type/address/length/tag and the requested
+//   inject_err mode (see pcie_top_defines.svh).
+//
+//   It drives through the normal named constraints (MEM_WR_CONSTRAINT,
+//   MEM_RD_CONSTRAINT, IO_RD_CONSTRAINT, ...) exactly like every
+//   other sequence in this file - only e_type/e_fmt/addr/length/tag/
+//   inject_err are set inline. The actual corruption for
+//   ERR_LEN_MISMATCH/ERR_IO_LEN/ERR_CFG_LEN/ERR_FMT_RTYPE/
+//   ERR_BYTE_EN/ERR_EP_POISON happens automatically afterwards, in
+//   Sequence_item::post_randomize() - it always wins over whatever
+//   the solver picked, so there's no need to fight/disable the
+//   named constraints here.
+//-----------------------------------------------------------------
+class Error_Inject_Seq extends uvm_sequence #(Sequence_item);
+
+  `uvm_object_utils(Error_Inject_Seq)
+
+  Tag_Manager tag_mgr;
+
+  tlp_type_e   p_type        = MEM_WR;
+  fmt_e        p_fmt         = FMT_3DW_DATA;
+  bit [63:0]   p_addr        = 64'h0;
+  bit [1023:0] p_length      = 1;
+  err_inject_e p_inject_err  = ERR_NONE;
+  bit          p_use_tag_mgr = 0;
+  bit [7:0]    p_tag         = 0;
+
+  int tag_id;
+
+  function new(string name = "Error_Inject_Seq");
+    super.new(name);
+  endfunction
+
+  task pre_body();
+    // Only MEM_RD-style negative tests need a real allocated tag
+    // (so the completion side has something outstanding to match
+    // against); posted writes and the deliberately-malformed cases
+    // just use tag 0 / p_tag directly.
+    if (p_use_tag_mgr)
+      void'(uvm_config_db #(Tag_Manager)::get(null, get_full_name(), "tag_mgr", tag_mgr));
+  endtask
+
+  task body();
+
+    req = Sequence_item::type_id::create("req");
+    start_item(req);
+
+    if (p_use_tag_mgr)
+      tag_id = tag_mgr.allocate_tag();
+
+    assert(req.randomize() with {
+      e_type   == local::p_type;
+      e_fmt    == local::p_fmt;
+      addr     == local::p_addr;
+      td       == 1;
+      tc       == 0;
+      tag      == (local::p_use_tag_mgr ? local::tag_id : local::p_tag);
+      length   == local::p_length;
+      if (local::p_type inside {MEM_WR, IO_WR, CFG_WR0, CFG_WR1})
+        payload.size() == local::p_length;
+      inject_err == local::p_inject_err;
+    }) else `uvm_fatal("SEQ", "Error_Inject_Seq randomize failed");
+
+    `uvm_info("SEQ",
+      $sformatf("Error_Inject_Seq: type=%s addr=%0h len=%0d inject_err=%s tag=%0d",
+                 req.e_type.name(), req.addr, req.length, req.inject_err.name(), req.tag),
+      UVM_LOW)
+
+    finish_item(req);
+
+  endtask : body
+
+endclass : Error_Inject_Seq
