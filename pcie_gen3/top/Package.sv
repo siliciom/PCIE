@@ -2,7 +2,7 @@ package Package;
  import uvm_pkg::*;
 `include "uvm_macros.svh"
 `include "pcie_top_defines.svh"
-//`include "../top/apb_defines.svh"
+`include "../top/apb_defines.svh"
 `include "../sequences/Sequence_item.sv"
 `include "../env/env_config.sv"
 `include "../env/FC_Manager.sv"
