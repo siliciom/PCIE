@@ -266,15 +266,12 @@ end
       t_x.ECRC = dw;
       t_x.tlp_q.push_back(dw);
     end
-    foreach(t_x.tlp_q[i])
-    `uvm_info("RC_TL_MONITOR", $sformatf("HEADER data %h header_dw = %d",t_x.tlp_q[i],header_dw), UVM_LOW)
-
-    `uvm_info("TX_TL_MONITOR", "=======================================================", UVM_LOW)
-    foreach(t_x.tlp_q[i])
-      `uvm_info("TX_TL_MONITOR", $sformatf("[%s] TL_TX_MONITOR_TLP_PACKET[%0d] = %0h @(%0t)", tag, i, t_x.tlp_q[i], $time), UVM_LOW)
-
-    `uvm_info("TX_TL_MONITOR", $sformatf("[%s] DEBUG TX MONITOR - fmt=%0b r_type=%0b addr=%0h length=%0d",
-                                          tag, t_x.fmt, t_x.r_type, t_x.addr, t_x.length), UVM_LOW)
+    t_x.stamp_uid();
+    // BOUNDARY TRACE: RC TL captured an outgoing request on the wire.
+    `uvm_info("TL_MON_RC", $sformatf("RC TL TX request captured  ->  %s  | %0d DW on wire",
+             t_x.convert2string(), t_x.tlp_q.size()), UVM_LOW)
+    if (uvm_report_enabled(UVM_HIGH, UVM_INFO, "TL_MON_RC"))
+      `uvm_info("TL_MON_RC", t_x.dump_dws("  "), UVM_HIGH)
 
     TX_TL_Send.write(t_x);
 
@@ -636,10 +633,14 @@ else if(header_dw == 4) begin
 end
 
     ////////////////////////////// PAYLOAD //////////////////////////////
+    // NOTE (known bug, punch-list #0a): Length==0 encodes the 1024-DW
+    // maximum (PCIe 3.0 sec 2.2.7) but this uses the raw field, so a
+    // max-payload TLP captures 0 payload DW here and then trips the
+    // ECRC check. The trace below prints the decoded length so the
+    // mismatch is obvious until the capture loop is fixed.
     payload_dw = r_x.length;
- `uvm_info("TLP_length",
-        $sformatf("[%s] ERR_LENGTH: Expected payload = %0d DW, Captured payload = %0d DW, Missing = %0d DW - Malformed TLP",
-                   tag, payload_dw, actual_payload_dw, payload_dw - actual_payload_dw),UVM_LOW)
+    `uvm_info("TL_MON_EP", $sformatf("[%s] EP RX request: header Length field=%0d (decoded=%0d DW) hdr_dw=%0d td=%0b",
+             tag, r_x.length, r_x.len_dw(), header_dw, r_x.td), UVM_HIGH)
 
     if(r_x.fmt inside {3'b010, 3'b011}) begin
       r_x.payload = new[payload_dw];
@@ -668,10 +669,6 @@ end
         end
       end
     end
-
-    `uvm_info("TLP_length",
-        $sformatf("[%s] ERR_LENGTH: Expected payload = %0d DW, Captured payload = %0d DW, Missing = %0d DW - Malformed TLP",
-                   tag, payload_dw, actual_payload_dw, payload_dw - actual_payload_dw),UVM_LOW)
 
     //-----------------------------------------------------------
     // ERR_LENGTH checker: Length field in the header must match
@@ -702,34 +699,35 @@ end
 
       calculated_ecrc = r_x.calculate_ecrc();
 
-      `uvm_info("RX_TL_MONITOR", $sformatf("[%s] RX ECRC CHECK: RECEIVED=%08h CALCULATED=%08h", tag, r_x.ECRC, calculated_ecrc), UVM_LOW)
+      `uvm_info("TL_MON_EP", $sformatf("[%s] EP RX ECRC check: rcvd=%08h calc=%08h %s | captured %0d payload DW (hdr Length=%0d, decoded=%0d)",
+               tag, r_x.ECRC, calculated_ecrc, (calculated_ecrc==r_x.ECRC)?"MATCH":"MISMATCH",
+               actual_payload_dw, r_x.length, r_x.len_dw()), UVM_LOW)
 
       if(calculated_ecrc == r_x.ECRC) begin
         r_x.ecrc_error   = 1'b0;
         r_x.compl_status = 3'b000;
         r_x.tlp_q.push_back(r_x.ECRC);
 
-        foreach(r_x.tlp_q[i])
-          `uvm_info("RX_TL_MONITOR", $sformatf("[%s] RX_TLP[%0d] = %08h @ %0t", tag, i, r_x.tlp_q[i], $time), UVM_LOW)
+        if (uvm_report_enabled(UVM_HIGH, UVM_INFO, "TL_MON_EP"))
+          `uvm_info("TL_MON_EP", r_x.dump_dws("  "), UVM_HIGH)
  if(r_x.ep ==1)
         `uvm_error("RX_TL_MONITOR", $sformatf("[%s] POISONED TLP - PACKET DROPPED", tag))
       else if(malformed_length)
         `uvm_error("RX_TL_MONITOR", $sformatf("[%s] MALFORMED TLP (length mismatch) - PACKET DROPPED", tag))
       else begin
 
+        `uvm_info("TL_MON_EP", $sformatf("[%s] EP RX request captured (TD)  ->  %s  | %0d DW, forwarding to LUT",
+                 tag, r_x.convert2string(), r_x.tlp_q.size()), UVM_LOW)
         RX_TL_Send.write(r_x);
-	`uvm_info("MON_TO_LUT",
-$sformatf("Sending to LUT: reg=%0d tag=%0d",
-          r_x.register_num,
-          r_x.tag),
-UVM_NONE)
         RX_TL_MON_Send.write(r_x);
 
-      end 
-      end 
+      end
+      end
       else begin
         r_x.ecrc_error = 1'b1;
-        `uvm_error("RX_TL_MONITOR", $sformatf("[%s] ECRC MISMATCH - PACKET DROPPED", tag))
+        `uvm_error("RX_TL_MONITOR",
+          $sformatf("[%s] ECRC MISMATCH - PACKET DROPPED  ->  %s  | rcvd_ecrc=%08h calc_ecrc=%08h captured_payload=%0d DW (hdr Length=%0d decoded=%0d)",
+                    tag, r_x.convert2string(), r_x.ECRC, calculated_ecrc, actual_payload_dw, r_x.length, r_x.len_dw()))
       end
 
     end else begin
@@ -740,8 +738,10 @@ UVM_NONE)
       else if(malformed_length)
         `uvm_error("RX_TL_MONITOR", $sformatf("[%s] MALFORMED TLP (length mismatch) - PACKET DROPPED", tag))
       else begin
-      foreach(r_x.tlp_q[i])
-        `uvm_info("RX_TL_MONITOR", $sformatf("[%s] RX_TLP[%0d] = %08h @ %0t", tag, i, r_x.tlp_q[i], $time), UVM_LOW)
+      `uvm_info("TL_MON_EP", $sformatf("[%s] EP RX request captured (no TD)  ->  %s  | %0d DW, forwarding to LUT",
+               tag, r_x.convert2string(), r_x.tlp_q.size()), UVM_LOW)
+      if (uvm_report_enabled(UVM_HIGH, UVM_INFO, "TL_MON_EP"))
+        `uvm_info("TL_MON_EP", r_x.dump_dws("  "), UVM_HIGH)
 
       RX_TL_Send.write(r_x);
       RX_TL_MON_Send.write(r_x);

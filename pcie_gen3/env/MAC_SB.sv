@@ -180,36 +180,27 @@ end
 function void compare_tlp1(Sequence_item tx_pkt, Sequence_item rx_pkt, string kind);
 
 bit match;
+int first_bad = -1;
     match = (tx_pkt.pma_rc_tx_q.size() == rx_pkt.pma_ep_rx_q.size());
     if (match) begin
       foreach (tx_pkt.pma_rc_tx_q[i]) begin
-
-`uvm_info("MAC_SB_COMPARE1",
-            $sformatf("Index=%0d  TX=%0h  RX=%0h",
-                      i,
-                      tx_pkt.pma_rc_tx_q[i],
-                      rx_pkt.pma_ep_rx_q[i]),
-            UVM_LOW)
-
-
+        `uvm_info("SCB_MAC", $sformatf("[%s] word[%0d]  TX=%033h  RX=%033h",
+                  kind, i, tx_pkt.pma_rc_tx_q[i], rx_pkt.pma_ep_rx_q[i]), UVM_HIGH)
         if (tx_pkt.pma_rc_tx_q[i] !== rx_pkt.pma_ep_rx_q[i]) begin
-          match = 0;
-          break;
+          match = 0; first_bad = i; break;
         end
       end
     end
 
     if (match) begin
       PL_pass_cnt++;
-      `uvm_info("MAC_SB_REQUEST_PASS",
-                $sformatf("[%s] MATCH (pass cnt=%0d) TX=%p RX=%p",
-                          kind, PL_pass_cnt, tx_pkt.pma_rc_tx_q, rx_pkt.pma_ep_rx_q),
-                UVM_LOW)
+      `uvm_info("SCB_MAC", $sformatf("[%s] MATCH (pass cnt=%0d, %0d words)", kind, PL_pass_cnt, tx_pkt.pma_rc_tx_q.size()), UVM_LOW)
     end else begin
       PL_fail_cnt++;
-      `uvm_error("MAC_SB_FAIL",
-                 $sformatf("[%s] MISMATCH (fail cnt=%0d)\n  TX(size=%0d)=%p\n  RX(size=%0d)=%p",
+      `uvm_error("SCB_MAC",
+                 $sformatf("[%s] PHY-word MISMATCH (fail cnt=%0d) %s\n  TX(size=%0d)=%p\n  RX(size=%0d)=%p",
                            kind, PL_fail_cnt,
+                           (first_bad>=0) ? $sformatf("first bad word index=%0d", first_bad) : "size mismatch",
                            tx_pkt.pma_rc_tx_q.size(), tx_pkt.pma_rc_tx_q,
                            rx_pkt.pma_ep_rx_q.size(), rx_pkt.pma_ep_rx_q))
     end
@@ -223,37 +214,27 @@ function void compare_tlp2(Sequence_item ep_item, Sequence_item rc_item, string 
  
 
  bit match;
+ int first_bad = -1;
     match = (ep_item.pma_ep_tx_q.size() == rc_item.pma_rc_rx_q.size());
     if (match) begin
       foreach (ep_item.pma_ep_tx_q[i]) begin
-
- `uvm_info("MAC_SB_COMPARE2",
-            $sformatf("Index=%0d  EP_TX=%0h  RC_RX=%0h",
-                      i,
-                      ep_item.pma_ep_tx_q[i],
-                      rc_item.pma_rc_rx_q[i]),
-            UVM_LOW)
-
-
-
+        `uvm_info("SCB_MAC", $sformatf("[%s] word[%0d]  EP_TX=%033h  RC_RX=%033h",
+                  kind, i, ep_item.pma_ep_tx_q[i], rc_item.pma_rc_rx_q[i]), UVM_HIGH)
         if (ep_item.pma_ep_tx_q[i] !== rc_item.pma_rc_rx_q[i]) begin
-          match = 0;
-          break;
+          match = 0; first_bad = i; break;
         end
       end
     end
 
     if (match) begin
       PL_pass_cnt++;
-      `uvm_info("MAC_SB_COMPLETION_PASS",
-                $sformatf("[%s] MATCH (pass cnt=%0d) EP_TX=%p RC_RX=%p",
-                          kind, PL_pass_cnt, ep_item.pma_ep_tx_q, rc_item.pma_rc_rx_q),
-                UVM_LOW)
+      `uvm_info("SCB_MAC", $sformatf("[%s] MATCH (pass cnt=%0d, %0d words)", kind, PL_pass_cnt, ep_item.pma_ep_tx_q.size()), UVM_LOW)
     end else begin
       PL_fail_cnt++;
-      `uvm_error("MAC_SB_FAIL",
-                 $sformatf("[%s] MISMATCH (fail cnt=%0d)\n  EP_TX(size=%0d)=%p\n  RC_RX(size=%0d)=%p",
+      `uvm_error("SCB_MAC",
+                 $sformatf("[%s] PHY-word MISMATCH (fail cnt=%0d) %s\n  EP_TX(size=%0d)=%p\n  RC_RX(size=%0d)=%p",
                            kind, PL_fail_cnt,
+                           (first_bad>=0) ? $sformatf("first bad word index=%0d", first_bad) : "size mismatch",
                            ep_item.pma_ep_tx_q.size(), ep_item.pma_ep_tx_q,
                            rc_item.pma_rc_rx_q.size(), rc_item.pma_rc_rx_q))
     end

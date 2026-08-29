@@ -128,6 +128,15 @@ class pcie_base_test extends uvm_test;
   function void start_of_simulation_phase(uvm_phase phase);
     super.start_of_simulation_phase(phase);
     uvm_top.print_topology;
+
+    // +PCIE_DEBUG : one switch to raise the whole env to UVM_HIGH so the
+    // per-DW dumps / per-byte striping / internal-state traces (all gated
+    // at UVM_HIGH) come out. Without it, +UVM_VERBOSITY=UVM_LOW already
+    // gives the per-TLP layer-boundary one-liners.
+    if ($test$plusargs("PCIE_DEBUG")) begin
+      uvm_top.set_report_verbosity_level_hier(UVM_HIGH);
+      `uvm_info("TEST", "+PCIE_DEBUG set -> env verbosity raised to UVM_HIGH", UVM_NONE)
+    end
   endfunction
 
   //-------------------------------------------------------------

@@ -11,9 +11,9 @@ class Sequence_tx extends uvm_sequence #(Sequence_item);
      
     `uvm_do_with(req, {e_type == MEM_WR; e_fmt == FMT_3DW_DATA; addr == 32'h10; td == 1; length == 4;})
 
-    $display("E_TYPE = %s E_FMT = %s fmt = %3b", req.e_type.name(), req.e_fmt.name(), req.fmt);
+    `uvm_info("SEQ", $sformatf("driving %s (e_fmt=%s fmt=%03b)", req.e_type.name(), req.e_fmt.name(), req.fmt), UVM_MEDIUM)
     `uvm_do_with(req, {e_type == MEM_RD; e_fmt == FMT_3DW_NO_DATA; addr == 32'h10; td == 1; length == 4;})
-    $display("E_TYPE = %s E_FMT = %s fmt = %3b", req.e_type.name(), req.e_fmt.name(), req.fmt);
+    `uvm_info("SEQ", $sformatf("driving %s (e_fmt=%s fmt=%03b)", req.e_type.name(), req.e_fmt.name(), req.fmt), UVM_MEDIUM)
 
     
 // `uvm_do_with(req, {e_type == IO_WR; addr == 32'h10; td == 1;})

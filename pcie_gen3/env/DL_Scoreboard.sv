@@ -158,64 +158,46 @@ task check_dllp_ep_to_rc();
 endtask
 
  
-  function void compare_tlp1(Sequence_item tx_pkt, Sequence_item rx_pkt, string tlp_kind);
+  // Shared DW-list compare + full aligned diff dump on mismatch.
+  // NOTE: pass/fail logic is UNCHANGED from the original compare_tlp1/2
+  // (iterates TX indices only, no size gate - so extra RX DWs are not
+  // flagged; that hardening is punch-list #5, tracked separately). The
+  // dump still SHOWS the size difference for debug.
+  function void dl_compare(bit [31:0] tx_q[$],
+                           bit [31:0] rx_q[$],
+                           string tlp_kind);
+    bit    ok = 1;
+    int    n  = (tx_q.size() > rx_q.size()) ? tx_q.size() : rx_q.size();
+    string dump;
 
-    bit pkt_pass = 1;
+    foreach (tx_q[i])
+      if (tx_q[i] !== rx_q[i]) ok = 0;   // out-of-range rx_q[i] reads as 0, same as the original
 
-    foreach (tx_pkt.tx_data_sb[i]) begin
-      if (tx_pkt.tx_data_sb[i] !== rx_pkt.ep_req_data_sb[i]) begin
-        `uvm_error("FAIL",
-          $sformatf("%s DW[%0d] MISMATCH — TX=%08h  RX=%08h",
-            tlp_kind, i, tx_pkt.tx_data_sb[i], rx_pkt.ep_req_data_sb[i]))
-        pkt_pass = 0;
-      end
-    end
-
-    if (pkt_pass) begin
+    if (ok) begin
       DL_pass_cnt++;
-      `uvm_info("DL_SCOREBOARD",
-        $sformatf("%s DLP MATCH (pass cnt=%0d)", tlp_kind, DL_pass_cnt), UVM_LOW)
-      foreach (tx_pkt.tx_data_sb[i])
-        `uvm_info("PASS",
-          $sformatf("  DLP[%0d] TX=%08h  RX=%08h",
-            i, tx_pkt.tx_data_sb[i], rx_pkt.ep_req_data_sb[i]), UVM_LOW)
-    end
-    else begin
-      DL_fail_cnt++;
-      `uvm_error("FAIL",
-        $sformatf("%s DLP MISMATCH (fail cnt=%0d)", tlp_kind, DL_fail_cnt))
+      `uvm_info("SCB_DL", $sformatf("%s DLP MATCH (pass cnt=%0d, %0d DW)", tlp_kind, DL_pass_cnt, tx_q.size()), UVM_LOW)
+      return;
     end
 
+    DL_fail_cnt++;
+    dump = $sformatf("\n==== %s DLP DIFF  TX=%0d DW  RX=%0d DW ====\n", tlp_kind, tx_q.size(), rx_q.size());
+    for (int i = 0; i < n; i++) begin
+      bit has_tx = (i < tx_q.size());
+      bit has_rx = (i < rx_q.size());
+      bit diff   = (!has_tx || !has_rx || tx_q[i] !== rx_q[i]);
+      dump = {dump, $sformatf("  %s DW[%0d]  TX=%s  RX=%s\n", diff ? "*" : " ", i,
+                              has_tx ? $sformatf("%08h", tx_q[i]) : "--------",
+                              has_rx ? $sformatf("%08h", rx_q[i]) : "--------")};
+    end
+    `uvm_error("SCB_DL", $sformatf("%s DLP MISMATCH (fail cnt=%0d)%s", tlp_kind, DL_fail_cnt, dump))
+  endfunction
+
+  function void compare_tlp1(Sequence_item tx_pkt, Sequence_item rx_pkt, string tlp_kind);
+    dl_compare(tx_pkt.tx_data_sb, rx_pkt.ep_req_data_sb, tlp_kind);
   endfunction
 
   function void compare_tlp2(Sequence_item tx_pkt, Sequence_item rx_pkt, string tlp_kind);
-
-    bit pkt_pass = 1;
-
-    foreach (tx_pkt.rx_data_sb[i]) begin
-      if (tx_pkt.rx_data_sb[i] !== rx_pkt.rc_com_data_sb[i]) begin
-        `uvm_error("FAIL",
-          $sformatf("%s DW[%0d] MISMATCH — TX=%08h  RX=%08h",
-            tlp_kind, i, tx_pkt.rx_data_sb[i], rx_pkt.rc_com_data_sb[i]))
-        pkt_pass = 0;
-      end
-    end
-
-    if (pkt_pass) begin
-      DL_pass_cnt++;
-      `uvm_info("DL_SCOREBOARD",
-        $sformatf("%s DLP MATCH (pass cnt=%0d)", tlp_kind, DL_pass_cnt), UVM_LOW)
-      foreach (tx_pkt.rx_data_sb[i])
-        `uvm_info("PASS",
-          $sformatf("  DLP[%0d] TX=%08h  RX=%08h",
-            i, tx_pkt.rx_data_sb[i], rx_pkt.rc_com_data_sb[i]), UVM_LOW)
-    end
-    else begin
-      DL_fail_cnt++;
-      `uvm_error("FAIL",
-        $sformatf("%s DLP MISMATCH (fail cnt=%0d)", tlp_kind, DL_fail_cnt))
-    end
-
+    dl_compare(tx_pkt.rx_data_sb, rx_pkt.rc_com_data_sb, tlp_kind);
   endfunction
 
  function void compare_dllp1(Sequence_item tx_pkt, Sequence_item rx_pkt, string tlp_kind);
@@ -278,8 +260,18 @@ function void compare_dllp2(Sequence_item tx_pkt, Sequence_item rx_pkt, string t
 
   endfunction
 
-
-
+  function void report_phase(uvm_phase phase);
+    string s;
+    super.report_phase(phase);
+    s = "\n================ DL_Scoreboard SUMMARY ================\n";
+    s = {s, $sformatf("  DLP  compare : pass=%0d  fail=%0d\n", DL_pass_cnt, DL_fail_cnt)};
+    s = {s, $sformatf("  DLLP compare : pass=%0d  fail=%0d\n", DLLP_pass_cnt, DLLP_fail_cnt)};
+    s = {s, $sformatf("  UNDRAINED queues: rc_tx=%0d ep_rx=%0d ep_tx=%0d rc_rx=%0d | dllp rc_tx=%0d ep_rx=%0d ep_tx=%0d rc_rx=%0d\n",
+                      rc_tx_q.size(), ep_rx_q.size(), ep_tx_q.size(), rc_rx_q.size(),
+                      rc_dllp_tx_q.size(), ep_dllp_rx_q.size(), ep_dllp_tx_q.size(), rc_dllp_rx_q.size())};
+    s = {s, "====================================================="};
+    `uvm_info("SCB_DL", s, UVM_NONE)
+  endfunction
 
 
 

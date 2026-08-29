@@ -92,11 +92,9 @@ class FC_Manager extends uvm_component;
 
     endcase
 
-    $display("vc=%0d pkt_type=%s hc=%0d dc=%0d",
-         vc,
-         pkt_type.name(),
-         header_credit,
-         data_credit);
+    `uvm_info("FC", $sformatf("CONSUME vc=%0d %s hc=%0d dc=%0d -> now PH=%0d PD=%0d NPH=%0d NPD=%0d CPLH=%0d CPLD=%0d",
+         vc, pkt_type.name(), header_credit, data_credit,
+         ph_avail[vc], pd_avail[vc], nph_avail[vc], npd_avail[vc], cplh_avail[vc], cpld_avail[vc]), UVM_MEDIUM)
 
     send_fc_update(vc);
 
@@ -153,15 +151,16 @@ class FC_Manager extends uvm_component;
     fc_update_ev.trigger();
 
 
-    $display("RETURN CREDIT: VC=%0d BEFORE_PH=%0d ADD_PH=%0d",
-         vc, ph_avail[vc], header_credit);
+    `uvm_info("FC", $sformatf("RETURN vc=%0d %s hc=%0d dc=%0d -> return-pool PH=%0d PD=%0d NPH=%0d NPD=%0d CPLH=%0d CPLD=%0d",
+         vc, pkt_type.name(), header_credit, data_credit,
+         ph_return[vc], pd_return[vc], nph_return[vc], npd_return[vc], cplh_return[vc], cpld_return[vc]), UVM_MEDIUM)
 
   endfunction
 
   function void send_fc_update(vc_id_e vc);
 
-    $display("VC%0d: PH=%0d PD=%0d NPH=%0d NPD=%0d CPLH=%0d CPLD=%0d",
-              vc, ph_avail[vc], pd_avail[vc], nph_avail[vc], npd_avail[vc], cplh_avail[vc], cpld_avail[vc]);
+    `uvm_info("FC", $sformatf("vc=%0d avail: PH=%0d PD=%0d NPH=%0d NPD=%0d CPLH=%0d CPLD=%0d",
+              vc, ph_avail[vc], pd_avail[vc], nph_avail[vc], npd_avail[vc], cplh_avail[vc], cpld_avail[vc]), UVM_HIGH)
 
   endfunction
 
@@ -206,6 +205,23 @@ class FC_Manager extends uvm_component;
     return 1;
 
 endfunction
+
+  function void report_phase(uvm_phase phase);
+    string s;
+    super.report_phase(phase);
+    s = "\n================ FC_Manager SUMMARY (credits remaining) ================\n";
+    foreach (ph_avail[v]) begin
+      if (ph_avail[v] != PH_TOTAL || pd_avail[v] != PD_TOTAL ||
+          nph_avail[v] != NPH_TOTAL || npd_avail[v] != NPD_TOTAL ||
+          cplh_avail[v] != CPLH_TOTAL || cpld_avail[v] != CPLD_TOTAL)
+        s = {s, $sformatf("  VC%0d: PH=%0d/%0d PD=%0d/%0d NPH=%0d/%0d NPD=%0d/%0d CPLH=%0d/%0d CPLD=%0d/%0d\n",
+                          v, ph_avail[v], PH_TOTAL, pd_avail[v], PD_TOTAL,
+                          nph_avail[v], NPH_TOTAL, npd_avail[v], NPD_TOTAL,
+                          cplh_avail[v], CPLH_TOTAL, cpld_avail[v], CPLD_TOTAL)};
+    end
+    s = {s, "======================================================================"};
+    `uvm_info("FC", s, UVM_NONE)
+  endfunction
 
 endclass : FC_Manager
 

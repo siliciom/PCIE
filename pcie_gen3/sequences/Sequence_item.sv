@@ -1,5 +1,14 @@
 class Sequence_item extends uvm_sequence_item;
   bit [31:0] tlp_q[$];
+
+  //-----------------------------------------------------------
+  // DEBUG: per-packet unique id. Stamped once by stamp_uid()
+  // (called from pack_tlp()). Every layer that logs this packet
+  // prints "uid=<n>" so one grep follows a TLP RC->EP and back.
+  // pkt_uid==0 means "never stamped" (e.g. a raw container item).
+  //-----------------------------------------------------------
+  int             pkt_uid = 0;
+  static int      s_uid_pool = 0;
 //   bit [31:0] tl_rx_q[$:159] = {32'h44108801, 32'h80001, 32'h200d94, 32'h275257e7, 32'hb9c24057};
   
   
@@ -775,9 +784,11 @@ endfunction
 
 
     function void pack_tlp();
-    
+
     bit [31:0] dw;
-    
+
+    stamp_uid();
+
     /////////////////////////////////////////////////////////   DOUBLE WORD ZERO (BYTE 0)   /////////////////////////////////////////////////////////////////////////
     
   case(e_type)
@@ -943,5 +954,79 @@ register_num, ext_register_num, dw), UVM_NONE)
 
     
     endfunction : calculate_ecrc
+
+  //===========================================================
+  // DEBUG HELPERS
+  //===========================================================
+
+  // Assign a unique id the first time a packet is packed.
+  function void stamp_uid();
+    if (pkt_uid == 0) pkt_uid = ++s_uid_pool;
+  endfunction
+
+  // Decoded TLP type from fmt+r_type (works even on a monitor-side
+  // item where only fmt/r_type were captured, not e_type).
+  function string type_str();
+    bit has_data = fmt[1];
+    casez ({r_type, has_data})
+      6'b00000_0 : return "MRd";
+      6'b00000_1 : return "MWr";
+      6'b00001_? : return "MRdLk";
+      6'b00010_0 : return "IORd";
+      6'b00010_1 : return "IOWr";
+      6'b00100_0 : return "CfgRd0";
+      6'b00100_1 : return "CfgWr0";
+      6'b00101_0 : return "CfgRd1";
+      6'b00101_1 : return "CfgWr1";
+      6'b01010_0 : return "Cpl";
+      6'b01010_1 : return "CplD";
+      default    : return $sformatf("?fmt=%03b/rt=%05b", fmt, r_type);
+    endcase
+  endfunction
+
+  function string cs_str();
+    case (compl_status)
+      3'b000 : return "SC";
+      3'b001 : return "UR";
+      3'b010 : return "CRS";
+      3'b100 : return "CA";
+      default: return $sformatf("cs=%03b", compl_status);
+    endcase
+  endfunction
+
+  // decoded Length field: 0 encodes the max, 1024 DW (PCIe 3.0 sec 2.2.7)
+  function int unsigned len_dw();
+    return (length == 0) ? 1024 : length;
+  endfunction
+
+  // One-line human-readable summary. Use everywhere a packet is logged.
+  function string convert2string();
+    string s;
+    s = $sformatf("[uid=%0d] %s %s", pkt_uid, type_str(), fmt[0] ? "4DW" : "3DW");
+    if (r_type inside {5'b01010}) begin   // completion
+      s = {s, $sformatf(" tag=%0h bc=%0d loAddr=0x%02h len=%0d %s cplID=%04h reqID=%04h",
+                        tag, (byte_count==0)?4096:byte_count, lower_addr, len_dw(),
+                        cs_str(), completer_id, req_id)};
+    end
+    else begin                            // request
+      s = {s, $sformatf(" len=%0d addr=0x%016h tag=%0h tc=%0d vc=%0s td=%0b ep=%0b attr=%0b%02b at=%02b fBE=%1h lBE=%1h",
+                        len_dw(), addr, tag, tc, vc.name(), td, ep, attr_1, attr_2, at, first_BE, last_BE)};
+    end
+    if (payload.size() > 0)
+      s = {s, $sformatf(" pyld[%0d]={%08h..%08h}", payload.size(), payload[0], payload[payload.size()-1])};
+    if (td)
+      s = {s, $sformatf(" ecrc=%08h", ECRC)};
+    return s;
+  endfunction
+
+  // Indexed dump of the packed DW list (header+payload+ecrc). Guard
+  // the caller with a UVM_HIGH check - this is verbose for big TLPs.
+  function string dump_dws(string prefix = "");
+    string s = $sformatf("%s[uid=%0d] tlp_q has %0d DW\n", prefix, pkt_uid, tlp_q.size());
+    foreach (tlp_q[i])
+      s = {s, $sformatf("%s  DW[%0d] = %08h%s\n", prefix, i, tlp_q[i],
+                        (i==0) ? $sformatf("   <- %s len=%0d td=%0b ep=%0b", type_str(), len_dw(), tlp_q[0][15], tlp_q[0][14]) : "")};
+    return s;
+  endfunction
 
 endclass : Sequence_item

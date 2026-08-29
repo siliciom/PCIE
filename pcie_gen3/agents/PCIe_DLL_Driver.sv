@@ -607,11 +607,8 @@ begin
 
                 rc_replay_buffer[rc_rd_ptr].replay_num = 0;
 
-                $display("[%0t] DELETE ACKED ENTRY : rd_ptr=%0d seq=%0d queue_size=%0d",
-                         $time,
-                         rc_rd_ptr,
-                         seq,
-                         rc_replay_buffer[rc_rd_ptr].packet_q.size());
+                `uvm_info("DLL_DRV_RC", $sformatf("replay-buf: DELETE ACKED seq=%0d rd_ptr=%0d qsize=%0d outstanding=%0d",
+                         seq, rc_rd_ptr, rc_replay_buffer[rc_rd_ptr].packet_q.size(), rc_outstanding_pkt_count), UVM_MEDIUM)
 
                 rc_replay_buffer[rc_rd_ptr].packet_q.delete();
 
@@ -626,11 +623,8 @@ begin
             // Delete entries preceding the ACKed sequence
             else begin
 
-                $display("[%0t] DELETE PREVIOUS ENTRY : rd_ptr=%0d seq=%0d queue_size=%0d",
-                         $time,
-                         rc_rd_ptr,
-                         seq,
-                         rc_replay_buffer[rc_rd_ptr].packet_q.size());
+                `uvm_info("DLL_DRV_RC", $sformatf("replay-buf: DELETE PRECEDING seq=%0d rd_ptr=%0d qsize=%0d outstanding=%0d",
+                         seq, rc_rd_ptr, rc_replay_buffer[rc_rd_ptr].packet_q.size(), rc_outstanding_pkt_count), UVM_MEDIUM)
 
                 rc_replay_buffer[rc_rd_ptr].packet_q.delete();
 
@@ -923,21 +917,17 @@ task rc_rx_recived_packet
     input bit [31:0] rx_packet_recived[$]
   );
 
-    $display("[%0t][RX_DLL_DRIVER] Collect DATA = %p",
-               $time,
-               rx_packet_recived);
+    `uvm_info("DLL_DRV_RC", $sformatf("DLL->TL(RC) push: %0d DW firstDW=%08h",
+             rx_packet_recived.size(), rx_packet_recived.size() ? rx_packet_recived[0] : 32'h0), UVM_MEDIUM)
 
-    foreach(rx_packet_recived[i]) begin 
+    foreach(rx_packet_recived[i]) begin
       wait(TX_TL_DL.tl_rx_ready);
 
       @(posedge TX_TL_DL.CLK);
        TX_TL_DL.tl_rx_valid <= 1'b1;
        TX_TL_DL.tl_rx_data <= rx_packet_recived[i];
 
-      $display("[%0t][RX_DLL_DRIVER] Sent DATA[%0d] = %h",
-               $time,
-               i,
-               rx_packet_recived[i]);
+      `uvm_info("DLL_DRV_RC", $sformatf("DLL->TL(RC) DW[%0d] = %08h", i, rx_packet_recived[i]), UVM_HIGH)
 
     end
       @(posedge TX_TL_DL.CLK);
@@ -1020,10 +1010,8 @@ task rc_tx_recived_packet
 
     TX_DLP_PACKET.push_back({20'd0, rc_DL_SEQ});
 
-      $display("@(%0t) DLL_SEQ = %0h",
-               $time,
-               {20'd0, rc_DL_SEQ});
-    
+      `uvm_info("DLL_DRV_RC", $sformatf("TX TLP framing: assigned seq=%0h", rc_DL_SEQ), UVM_MEDIUM)
+
     for(int i = 0; i < tx_packet_recived.size(); i++) begin
       TX_DLP_PACKET.push_back(tx_packet_recived[i]);
     end
@@ -1043,9 +1031,8 @@ task rc_tx_recived_packet
 
     TX_DLP_PACKET.push_back(rx_lcrc);
 
-      $display("@(%0t) DLL_LCRC = %0h",
-               $time,
-               rx_lcrc);
+      `uvm_info("DLL_DRV_RC", $sformatf("TX TLP framed: seq=%0h lcrc=%08h total=%0d DW (seq+hdr+pyld+ecrc+lcrc)",
+               rc_DL_SEQ, rx_lcrc, TX_DLP_PACKET.size()), UVM_MEDIUM)
 
       // Store Into Replay Buffer
 
@@ -1127,11 +1114,8 @@ begin
 
                 ep_replay_buffer[ep_rd_ptr].ep_replay_num = 0;
 
-                $display("[%0t] EP DELETE ACKED ENTRY : rd_ptr=%0d seq=%0d queue_size=%0d",
-                         $time,
-                         ep_rd_ptr,
-                         seq,
-                         ep_replay_buffer[ep_rd_ptr].ep_packet_q.size());
+                `uvm_info("DLL_DRV_EP", $sformatf("replay-buf: DELETE ACKED seq=%0d rd_ptr=%0d qsize=%0d outstanding=%0d",
+                         seq, ep_rd_ptr, ep_replay_buffer[ep_rd_ptr].ep_packet_q.size(), ep_outstanding_pkt_count), UVM_MEDIUM)
 
                 ep_replay_buffer[ep_rd_ptr].ep_packet_q.delete();
 
@@ -1146,11 +1130,8 @@ begin
             // Delete entries preceding the ACKed sequence
             else begin
 
-                $display("[%0t] EP DELETE PREVIOUS ENTRY : rd_ptr=%0d seq=%0d queue_size=%0d",
-                         $time,
-                         ep_rd_ptr,
-                         seq,
-                         ep_replay_buffer[ep_rd_ptr].ep_packet_q.size());
+                `uvm_info("DLL_DRV_EP", $sformatf("replay-buf: DELETE PRECEDING seq=%0d rd_ptr=%0d qsize=%0d outstanding=%0d",
+                         seq, ep_rd_ptr, ep_replay_buffer[ep_rd_ptr].ep_packet_q.size(), ep_outstanding_pkt_count), UVM_MEDIUM)
 
                 ep_replay_buffer[ep_rd_ptr].ep_packet_q.delete();
 
@@ -1440,10 +1421,7 @@ task ep_rx_recived_packet
 
       RX_TL_DL.tl_rx_data <= rx_packet_recived[i];
 
-      $display("[%0t][RX_DLL_DRIVER] Sent DATA[%0d] = %h",
-               $time,
-               i,
-               rx_packet_recived[i]);
+      `uvm_info("DLL_DRV_EP", $sformatf("DLL->TL(EP) DW[%0d] = %08h", i, rx_packet_recived[i]), UVM_HIGH)
 
     end
       @(posedge RX_TL_DL.CLK);
@@ -1520,10 +1498,8 @@ task ep_tx_recived_packet
 
     TX_DLP_PACKET.push_back({20'd0, ep_RX_DL_SEQ});
 
-      $display("@(%0t) DLL_SEQ = %0h",
-               $time,
-               {20'd0, ep_RX_DL_SEQ});
-    
+      `uvm_info("DLL_DRV_EP", $sformatf("TX TLP framing: assigned seq=%0h", ep_RX_DL_SEQ), UVM_MEDIUM)
+
     for(int i = 0; i < tx_packet_recived.size(); i++) begin
       TX_DLP_PACKET.push_back(tx_packet_recived[i]);
     end
@@ -1540,10 +1516,8 @@ task ep_tx_recived_packet
 
     TX_DLP_PACKET.push_back(rx_lcrc);
 
-//       
-      $display("@(%0t) DLL_LCRC = %0h",
-               $time,
-               rx_lcrc);
+      `uvm_info("DLL_DRV_EP", $sformatf("TX TLP framed: seq=%0h lcrc=%08h total=%0d DW (seq+hdr+pyld+ecrc+lcrc)",
+               ep_RX_DL_SEQ, rx_lcrc, TX_DLP_PACKET.size()), UVM_MEDIUM)
 
       // Store Into Replay Buffer
 
@@ -1768,9 +1742,8 @@ begin
       rc_rx_pkt_tlp.get(rc_rx_pkt);
 
       rc_rx_local_queue = rc_rx_pkt.rx_data_t;
-         $display("[%0t][RX_DLL_DRIVER] Collect DATA = %p",
-               $time,
-               rc_rx_local_queue);
+         `uvm_info("DLL_DRV_RC", $sformatf("DLL(RC) collected RX completion: %0d DW firstDW=%08h",
+               rc_rx_local_queue.size(), rc_rx_local_queue.size() ? rc_rx_local_queue[0] : 32'h0), UVM_MEDIUM)
 
       rc_rx_recived_packet(rc_rx_local_queue);
 

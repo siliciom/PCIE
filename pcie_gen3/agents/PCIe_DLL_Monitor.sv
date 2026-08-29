@@ -303,6 +303,8 @@ Sequence_item rx_pkt;
       rc_collect_request(tx_pkt);
 
       if (tx_pkt.tx_data_sb.size() > 0) begin
+            `uvm_info("DLL_MON_RC", $sformatf("RC DLL captured TX request on wire: %0d DW (seq+hdr+pyld+ecrc+lcrc), firstDW=%08h",
+                     tx_pkt.tx_data_sb.size(), tx_pkt.tx_data_sb[0]), UVM_LOW)
             rc_tx.write(tx_pkt);
 
               end
@@ -545,6 +547,8 @@ task rc_collect_tlp(Sequence_item r_x);
   end
   r_x.rc_com_data_sb.push_back(lcrc);
 /////////////////////////////call_write_for_SB/////////////////////
+  `uvm_info("DLL_MON_RC", $sformatf("RC DLL collected RX completion: %0d DW (seq=%08h, hdr+pyld+ecrc=%0d DW, lcrc=%08h)",
+           r_x.rc_com_data_sb.size(), seq_no, lcrc_pkt_q.size()-1, lcrc), UVM_LOW)
    rc_rx.write(r_x);
   calc_lcrc = rc_calculate_lcrc(lcrc_pkt_q);
   ////////////////////////////////////////////////////////////
@@ -1034,8 +1038,9 @@ task ep_collect_tlp(Sequence_item r_x);
     lcrc_pkt_q.push_back(body_q[i]);
     r_x.ep_req_data_sb.push_back(body_q[i]);
   end
-  `uvm_info("RX_PKT", $sformatf("EP: Received DATA on RX_DLL_PCS.dl_rx_data = %08h", lcrc), UVM_LOW)
   r_x.ep_req_data_sb.push_back(lcrc);
+  `uvm_info("DLL_MON_EP", $sformatf("EP DLL collected RX TLP: %0d DW (seq=%08h, hdr+pyld+ecrc=%0d DW, lcrc=%08h)",
+           r_x.ep_req_data_sb.size(), seq_no, lcrc_pkt_q.size()-1, lcrc), UVM_LOW)
   ep_rx.write(r_x); //////////SENDING_SB/////////
   calc_lcrc = ep_calculate_lcrc(lcrc_pkt_q);
   ////////////////////////////////////////////////////////////

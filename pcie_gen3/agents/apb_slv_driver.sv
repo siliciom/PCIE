@@ -68,7 +68,7 @@ task wait_rsp(apb_slv_xtn xtnh);
 					uvm_report_info("SLAVE","PREADY-DRIVEN",UVM_HIGH);
 
          cfg_model.write_reg(vif.PADDR, vif.PWDATA);
-$display("cfg_mem[%0d] = %0h", vif.PADDR, cfg_model.read_reg(vif.PADDR));
+`uvm_info("APB_SLV", $sformatf("cfg write [0x%0h] <= 0x%08h (readback 0x%08h)", vif.PADDR, vif.PWDATA, cfg_model.read_reg(vif.PADDR)), UVM_MEDIUM)
           vif.PSLVERR <= 1'b0;
           @(posedge vif.PCLK);
           vif.PREADY <= 1'b0;
@@ -99,7 +99,7 @@ task nowait_rsp(apb_slv_xtn xtnh);
 
         
          cfg_model.write_reg(vif.PADDR, vif.PWDATA);
-$display("cfg_mem[%0d] = %0h", vif.PADDR, cfg_model.read_reg(vif.PADDR));
+`uvm_info("APB_SLV", $sformatf("cfg write [0x%0h] <= 0x%08h (readback 0x%08h)", vif.PADDR, vif.PWDATA, cfg_model.read_reg(vif.PADDR)), UVM_MEDIUM)
 
           vif.PSLVERR <= 1'b0;
           @(posedge vif.PCLK);

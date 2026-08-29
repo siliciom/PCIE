@@ -74,10 +74,7 @@ class VC_Arbiter extends uvm_component;
             starve_count[v] = 0;
             for (int lower = v-1; lower >= 0; lower--)
               if (vc_q[lower].size() != 0) starve_count[lower]++; 
-            `uvm_info("VC_Arbiter", $sformatf("Arbitration winner: VC%0d (strict priority)", v), UVM_LOW)
-	    foreach (starve_count[i]) begin
-  $display("VC%0d starve_count = %0d", i, starve_count[i]);
-end
+            `uvm_info("VC_ARB", $sformatf("winner: VC%0d (strict priority); starve_count=%p", v, starve_count), UVM_MEDIUM)
             return;
 
           end

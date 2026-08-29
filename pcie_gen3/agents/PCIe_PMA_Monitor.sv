@@ -277,7 +277,8 @@ class PCIe_PMA_monitor extends uvm_monitor;
                   end
 
                   cur_item.pma_rx_data[lane].push_back(data_lane[lane]);
-                  $display("lane %0d data = %p size %0d", lane, cur_item.pma_rx_data[lane], cur_item.pma_rx_data[lane].size());
+                  `uvm_info("PMA_RX_MON", $sformatf("[%s] lane %0d capture: size=%0d lastWord=%033h",
+                            tag, lane, cur_item.pma_rx_data[lane].size(), data_lane[lane]), UVM_HIGH)
                 end
               end
 

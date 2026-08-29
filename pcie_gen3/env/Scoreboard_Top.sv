@@ -287,46 +287,73 @@ class Scoreboard_Top extends uvm_scoreboard;
     end
   endfunction
 
+  // Full aligned TX-vs-RX dump for a mismatched packet pair. One row
+  // per DW; '*' flags the differing rows; header rows are decoded.
+  function string diff_dump(Sequence_item tx_pkt, Sequence_item rx_pkt, string tlp_kind);
+    int n = (tx_pkt.tlp_q.size() > rx_pkt.tlp_q.size()) ? tx_pkt.tlp_q.size() : rx_pkt.tlp_q.size();
+    string s = $sformatf("\n==== %s DIFF  TX[uid=%0d %s] (%0d DW)  vs  RX[uid=%0d %s] (%0d DW) ====\n",
+                         tlp_kind, tx_pkt.pkt_uid, tx_pkt.type_str(), tx_pkt.tlp_q.size(),
+                         rx_pkt.pkt_uid, rx_pkt.type_str(), rx_pkt.tlp_q.size());
+    for (int i = 0; i < n; i++) begin
+      bit has_tx = (i < tx_pkt.tlp_q.size());
+      bit has_rx = (i < rx_pkt.tlp_q.size());
+      bit diff   = (!has_tx || !has_rx || (tx_pkt.tlp_q[i] !== rx_pkt.tlp_q[i]));
+      s = {s, $sformatf("  %s DW[%0d]  TX=%s  RX=%s\n",
+                        diff ? "*" : " ", i,
+                        has_tx ? $sformatf("%08h", tx_pkt.tlp_q[i]) : "--------",
+                        has_rx ? $sformatf("%08h", rx_pkt.tlp_q[i]) : "--------")};
+    end
+    return s;
+  endfunction
+
   function void compare_tlp(Sequence_item tx_pkt, Sequence_item rx_pkt,
                              string tlp_kind);
     if (tx_pkt.tlp_q.size() !== rx_pkt.tlp_q.size()) begin
-      `uvm_error("FAIL",
-        $sformatf("%s TLP SIZE MISMATCH: TX=%0d DWs  RX=%0d DWs",
-          tlp_kind, tx_pkt.tlp_q.size(), rx_pkt.tlp_q.size()))
       fail_cnt++;
+      `uvm_error("SCB_TOP",
+        $sformatf("%s TLP SIZE MISMATCH: TX=%0d DW  RX=%0d DW (fail cnt=%0d)%s",
+          tlp_kind, tx_pkt.tlp_q.size(), rx_pkt.tlp_q.size(), fail_cnt,
+          diff_dump(tx_pkt, rx_pkt, tlp_kind)))
       return;
     end
     begin
       bit pkt_pass = 1;
-      foreach (tx_pkt.tlp_q[i]) begin
-        if (tx_pkt.tlp_q[i] !== rx_pkt.tlp_q[i]) begin
-          `uvm_error("FAIL",
-            $sformatf("%s DW[%0d] MISMATCH — TX=%08h  RX=%08h",
-              tlp_kind, i, tx_pkt.tlp_q[i], rx_pkt.tlp_q[i]))
-          pkt_pass = 0;
-        end
-      end
+      foreach (tx_pkt.tlp_q[i])
+        if (tx_pkt.tlp_q[i] !== rx_pkt.tlp_q[i]) pkt_pass = 0;
+
       if (pkt_pass) begin
         pass_cnt++;
-        `uvm_info("SCOREBOARD",
-          $sformatf("%s TLP MATCH (pass cnt=%0d)", tlp_kind, pass_cnt), UVM_LOW)
-        foreach (tx_pkt.tlp_q[i])
-          `uvm_info("PASS",
-            $sformatf("  TLP[%0d] TX=%08h  RX=%08h",
-              i, tx_pkt.tlp_q[i], rx_pkt.tlp_q[i]), UVM_LOW)
+        `uvm_info("SCB_TOP",
+          $sformatf("%s TLP MATCH (pass cnt=%0d)  ->  %s", tlp_kind, pass_cnt, tx_pkt.convert2string()), UVM_LOW)
       end else begin
         fail_cnt++;
-        `uvm_error("FAIL",
-          $sformatf("%s TLP MISMATCH (fail cnt=%0d)", tlp_kind, fail_cnt))
+        `uvm_error("SCB_TOP",
+          $sformatf("%s TLP DATA MISMATCH (fail cnt=%0d)%s", tlp_kind, fail_cnt,
+            diff_dump(tx_pkt, rx_pkt, tlp_kind)))
       end
     end
   endfunction
 
   function void report_phase(uvm_phase phase);
+    string s;
     super.report_phase(phase);
-    `uvm_info("MEM_MODEL",
-      $sformatf("FINAL MEM SCOREBOARD RESULT: mem_pass_cnt=%0d mem_fail_cnt=%0d",
-        mem_pass_cnt, mem_fail_cnt), UVM_LOW)
+
+    s = "\n================ Scoreboard_Top SUMMARY ================\n";
+    s = {s, $sformatf("  TLP transport compare : pass=%0d  fail=%0d\n", pass_cnt, fail_cnt)};
+    s = {s, $sformatf("  Memory read compare   : pass=%0d  fail=%0d\n", mem_pass_cnt, mem_fail_cnt)};
+    s = {s, $sformatf("  mem model entries     : %0d DW written\n", mem.num())};
+    s = {s, $sformatf("  UNDRAINED queues      : tx_req=%0d rx_req=%0d tx_cpl=%0d rx_cpl=%0d\n",
+                      tx_req_q.size(), rx_req_q.size(), tx_cpl_q.size(), rx_cpl_q.size())};
+    s = {s, $sformatf("  OUTSTANDING reads     : %0d\n", pending_reads.num())};
+    if (pending_reads.num() > 0) begin
+      bit [23:0] k;
+      if (pending_reads.first(k))
+        do s = {s, $sformatf("     key=%06h addr=%016h length=%0d received_dw=%0d\n",
+                             k, pending_reads[k].addr, pending_reads[k].length, pending_reads[k].received_dw)};
+        while (pending_reads.next(k));
+    end
+    s = {s, "======================================================="};
+    `uvm_info("SCB_TOP", s, UVM_NONE)
   endfunction
 
 endclass
