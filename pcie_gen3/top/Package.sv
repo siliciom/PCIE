@@ -35,7 +35,7 @@ package Package;
 
 
 `include "../env/MAC_SB.sv"
-/*
+
 `include "../sequences/apb_master_seq_item.sv"
 `include "../agents/apb_master_sequencer.sv"
 `include "../agents/apb_master_driver.sv"
@@ -52,7 +52,7 @@ package Package;
 `include "../agents/apb_slv_agent.sv"
 //`include "../env/reg_block1.sv"
 //`include "../sequences/uvm_reg_sequence1.sv"
-*/
+
 `include "../env/Env_Top.sv"
 `include "../tests/Test.sv"
 `include "../tests/Error_Tests.sv"

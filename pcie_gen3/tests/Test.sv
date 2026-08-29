@@ -919,7 +919,7 @@ endclass : Multiple_Mem_Wr_Rd_4DW_rand_length_test
 // Starts pcie_cfg_full_ral_seq (from pcie_ral_seq_lib.sv)
 // against the RAL model built inside Env_Top.
 //=========================================================
-/*
+
 class pcie_ral_test extends uvm_test;
 
   // If you already have a common base test (e.g. pcie_base_test) that
@@ -971,7 +971,7 @@ endfunction
   endtask
 
 endclass : pcie_ral_test
-*/
+
 class LTSSM_Disabled_test extends pcie_base_test;
 
   `uvm_component_utils(LTSSM_Disabled_test)
