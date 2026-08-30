@@ -4235,22 +4235,57 @@ endtask
   endtask
 
   //-----------------------------------------------------------
-  // Layered stimulus (cfg.stim_layer == STIM_MAC): take pre-framed
-  // DLL packets from THIS driver's own sequencer and feed the exact
-  // same write_port_e (RC) / write_port_g (EP) the monitor-snoop
-  // path uses. The sequence fills req.mac_tx_data / req.mac_rx_data
-  // via Sequence_item::build_mac_stream (seq# + TLP + LCRC already
-  // present; the MAC driver adds the STP token and stripes).
+  // Layered stimulus (cfg.stim_layer == STIM_MAC): take a pre-framed
+  // DLL packet ({seq#, header, payload, ECRC, LCRC}) from THIS
+  // driver's own sequencer and DRIVE IT onto the DLL<->MAC interface
+  // (dl_tx_*), exactly the way PCIe_DLL_Driver::rc_send_packet /
+  // ep_send_packet does. The MAC monitor then snoops it and feeds the
+  // rest of the MAC/PMA path through the normal analysis port -
+  // reusing the same route the DLL-injection test proved works.
+  // (An earlier version called write_port_e() directly, which raced
+  // the L0 drain loop and livelocked.)
+  // The sequence fills req.mac_tx_data[0] via
+  // Sequence_item::build_mac_stream.
   //-----------------------------------------------------------
   task mac_stim_seqr_thread();
     Sequence_item req;
-    `uvm_info("MAC_TX_DRV", $sformatf("[%s] STIM_MAC: taking framed packets from MAC seqr", tag), UVM_LOW)
+    bit [31:0]    framed[$];
+    `uvm_info("MAC_TX_DRV", $sformatf("[%s] STIM_MAC: taking framed packets from MAC seqr (%s)",
+             tag, cfg.mode.name()), UVM_LOW)
+    if (cfg.mode != RC_MODE && cfg.mode != EP_MODE)
+      `uvm_fatal("MAC_TX_DRV", "STIM_MAC: unknown mode")
+
     forever begin
       seq_item_port.get_next_item(req);
-      if (cfg.mode == RC_MODE) write_port_e(req);
-      else                     write_port_g(req);
-      `uvm_info("MAC_TX_DRV", $sformatf("[%s] STIM_MAC: injected [uid=%0d] into %s TX path",
-               tag, req.pkt_uid, cfg.mode.name()), UVM_MEDIUM)
+      framed = (req.mac_tx_data.size() > 0) ? req.mac_tx_data[0] : req.tx_data_t;
+
+      if (cfg.mode == RC_MODE) begin
+        foreach (framed[i]) begin
+          @(posedge rc_vif.CLK);
+          wait (rc_vif.dl_tx_ready);
+          rc_vif.dl_tx_valid <= 1'b1;
+          rc_vif.tl_packet   <= 1'b1;
+          rc_vif.dl_tx_data  <= framed[i];
+        end
+        @(posedge rc_vif.CLK);
+        rc_vif.dl_tx_valid <= 1'b0;
+        rc_vif.tl_packet   <= 1'b0;
+      end
+      else begin
+        foreach (framed[i]) begin
+          @(posedge ep_vif.CLK);
+          wait (ep_vif.dl_tx_ready);
+          ep_vif.dl_tx_valid <= 1'b1;
+          ep_vif.tl_packet   <= 1'b1;
+          ep_vif.dl_tx_data  <= framed[i];
+        end
+        @(posedge ep_vif.CLK);
+        ep_vif.dl_tx_valid <= 1'b0;
+        ep_vif.tl_packet   <= 1'b0;
+      end
+
+      `uvm_info("MAC_TX_DRV", $sformatf("[%s] STIM_MAC: drove [uid=%0d] %0d DW onto dl_tx (%s)",
+               tag, req.pkt_uid, framed.size(), cfg.mode.name()), UVM_MEDIUM)
       seq_item_port.item_done();
     end
   endtask

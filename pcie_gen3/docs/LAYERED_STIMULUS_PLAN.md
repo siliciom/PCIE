@@ -9,7 +9,13 @@ Status: **Phase 1 (analysis) + Phase 2 (infra) done; DLL injection path verified
 - `layer_dll_memwr_smoke_test`: a bare MEM_WR injected at `PCIe_DLL_Seqr` arrives byte-identical at
   the EP TL monitor; `DL_Scoreboard` DLP compare pass=47/0 (the injected TLP is the last entry,
   10 DW = seq + 8 + LCRC that the DLL driver added); 0 errors / 0 fatals.
-MAC + PMA smoke tests are next. See §5 for phases, §7 for the change log.
+- **MAC path**: first version (direct `write_port_e()` call) **livelocked** the sim (a zero-time
+  loop where the L0 drain loop and the STP re-parser fought over `rc_received` / `rc_r_data`).
+  Reworked so the MAC stim thread **drives the framed packet onto the `dl_tx_*` interface**
+  DW-by-DW, the same way `PCIe_DLL_Driver::rc_send_packet` does — the MAC monitor then snoops it
+  through the exact route the DLL test proved works. Compiles; **run-verify pending simulator
+  license** (a regression was holding all vsim licenses).
+- PMA smoke: not started.
 
 ---
 
@@ -281,7 +287,7 @@ added**:
 | `env/env_config.sv` | `typedef enum { STIM_TL, STIM_DLL, STIM_MAC, STIM_PMA } stim_layer_e;` and `stim_layer_e stim_layer = STIM_TL;` |
 | `sequences/Sequence_item.sv` | `calculate_lcrc(dw_q)`; `build_dll_stream()` (fills `tx_data` + `tx_data_t`); `build_mac_stream(seq_no)` (fills `mac_tx_data` + `mac_rx_data` with `{seq, tlp_q, lcrc}`); `build_pma_blocks(dw_q, lane)` (2'b10 sync header + 4 DW, **not scrambled**) |
 | `agents/PCIe_DLL_Driver.sv` | `dll_stim_seqr_thread()` — forked in `run_phase` RC & EP branches when `cfg.stim_layer == STIM_DLL`; waits for `DL_ACTIVE` / `EP_DL_ACTIVE`, then `put`s the item into `rc_tx_pkt_mb` / `ep_tx_pkt_mb` (the same mailbox `write_TX`/`write_tx` feed) |
-| `agents/PCIe_MAC_Driver.sv` | `mac_stim_seqr_thread()` — `fork ... join_none` at the top of `run_phase` when `STIM_MAC`; RC → `write_port_e(req)`, EP → `write_port_g(req)` |
+| `agents/PCIe_MAC_Driver.sv` | `mac_stim_seqr_thread()` — `fork ... join_none` at the top of `run_phase` when `STIM_MAC`. Drives the framed packet onto `rc_vif` / `ep_vif` `dl_tx_valid`/`dl_tx_data`/`tl_packet` DW-by-DW (`wait(dl_tx_ready)`), like `rc_send_packet` / `ep_send_packet`. The MAC monitor snoops it and the normal `write_port_e`/`write_port_g` path takes over. (Direct `write_port_e()` was tried first and livelocked.) |
 | `agents/PCIe_PMA_Driver.sv` | `pma_stim_seqr_thread()` — `fork ... join_none` when `STIM_PMA`; RC → `write_port_c(req)` (EP side is a v2 item, warns) |
 | `sequences/Layer_Sequences.sv` *(new)* | `pcie_dll_base_seq` (`send_tlp` / `send_raw`), `pcie_mac_base_seq` (`send_framed`), `pcie_pma_base_seq` (`send_dw_stream`) |
 | `tests/Layer_Tests.sv` *(new)* | `layer_base_test` (knobs `stim_layer` / `wait_link_up` / `do_enum` / `inject_on_ep`; sets `stim_layer` on `rc_cfg`/`ep_cfg` in `build_phase` after `super`; re-implements `run_phase`; `dll_seqr()` / `mac_seqr()` / `pma_seqr()` accessors; `virtual task body()`) + `layer_dll_memwr_smoke_test`, `layer_mac_memwr_smoke_test` |
