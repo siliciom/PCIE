@@ -137,7 +137,28 @@ end
     pma_rx.size_rx_tx.push_back(pkt_rx_size);
   endfunction
 
+  //-----------------------------------------------------------
+  // Layered stimulus (cfg.stim_layer == STIM_PMA): take pre-blocked
+  // 130-bit words from THIS driver's own sequencer and feed the same
+  // write_port_c the monitor-snoop path uses. The sequence fills
+  // req.pma_tx_data[lane] via Sequence_item::build_pma_blocks.
+  //-----------------------------------------------------------
+  task pma_stim_seqr_thread();
+    Sequence_item req;
+    if (cfg.mode != RC_MODE)
+      `uvm_warning("PMA_TX_DRV", "STIM_PMA v1 supports RC-side injection only; EP-side is a v2 item")
+    `uvm_info("PMA_TX_DRV", $sformatf("[%s] STIM_PMA: taking blocks from PMA seqr", tag), UVM_LOW)
+    forever begin
+      seq_item_port.get_next_item(req);
+      write_port_c(req);   // RC path: pma_tx_data[lane] -> mac_tx_data_q[lane] -> serialised
+      `uvm_info("PMA_TX_DRV", $sformatf("[%s] STIM_PMA: injected [uid=%0d]", tag, req.pkt_uid), UVM_MEDIUM)
+      seq_item_port.item_done();
+    end
+  endtask
+
   virtual task run_phase(uvm_phase phase);
+
+    if (cfg.stim_layer == STIM_PMA) fork pma_stim_seqr_thread(); join_none
 
     case(cfg.mode)
 

@@ -22,7 +22,11 @@ covhtmlreport/
 
 # ── Scratch / experiment do-files (keep run.do, regr.do, run_all.do) ──
 pcie_gen3/sim/compile_check*.do
+pcie_gen3/sim/compile_gen*.do
 pcie_gen3/sim/run_gen3_*.do
+pcie_gen3/sim/run_phase*.do
+pcie_gen3/sim/p2_*.do
+pcie_gen3/sim/p3_*.do
 
 # ── Editor / OS ──────────────────────────────────────────────────────
 *.swp

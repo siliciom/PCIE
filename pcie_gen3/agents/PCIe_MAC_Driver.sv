@@ -4234,8 +4234,31 @@ endtask
 
   endtask
 
+  //-----------------------------------------------------------
+  // Layered stimulus (cfg.stim_layer == STIM_MAC): take pre-framed
+  // DLL packets from THIS driver's own sequencer and feed the exact
+  // same write_port_e (RC) / write_port_g (EP) the monitor-snoop
+  // path uses. The sequence fills req.mac_tx_data / req.mac_rx_data
+  // via Sequence_item::build_mac_stream (seq# + TLP + LCRC already
+  // present; the MAC driver adds the STP token and stripes).
+  //-----------------------------------------------------------
+  task mac_stim_seqr_thread();
+    Sequence_item req;
+    `uvm_info("MAC_TX_DRV", $sformatf("[%s] STIM_MAC: taking framed packets from MAC seqr", tag), UVM_LOW)
+    forever begin
+      seq_item_port.get_next_item(req);
+      if (cfg.mode == RC_MODE) write_port_e(req);
+      else                     write_port_g(req);
+      `uvm_info("MAC_TX_DRV", $sformatf("[%s] STIM_MAC: injected [uid=%0d] into %s TX path",
+               tag, req.pkt_uid, cfg.mode.name()), UVM_MEDIUM)
+      seq_item_port.item_done();
+    end
+  endtask
+
   task run_phase(uvm_phase phase);
     super.run_phase(phase);
+
+    if (cfg.stim_layer == STIM_MAC) fork mac_stim_seqr_thread(); join_none
 
     case(cfg.mode)
 

@@ -1553,17 +1553,46 @@ task ep_tx_recived_packet
         fork
           rc_run_phase_body();
           rc_drive_dl_up_thread();
+          if (cfg.stim_layer == STIM_DLL) dll_stim_seqr_thread();
         join
       end
       EP_MODE: begin
         fork
           ep_run_phase_body();
           ep_drive_dl_up_thread();
+          if (cfg.stim_layer == STIM_DLL) dll_stim_seqr_thread();
         join
       end
       default: `uvm_fatal("PCIe_DLL_Driver", $sformatf("[%s] Unknown mode", tag))
     endcase
 
+  endtask
+
+  //-----------------------------------------------------------
+  // Layered stimulus (cfg.stim_layer == STIM_DLL): take pre-formed
+  // TLPs from THIS driver's own sequencer and feed the exact same
+  // internal mailbox the monitor-snoop path (write_TX / write_tx)
+  // feeds. The sequence fills req.tx_data_t / req.tx_data with a
+  // bare TLP (no seq #, no LCRC) via Sequence_item::build_dll_stream.
+  // The DLL TX path is only live in DL_ACTIVE, so gate on that.
+  //-----------------------------------------------------------
+  task dll_stim_seqr_thread();
+    Sequence_item req;
+    `uvm_info("DLL_DRV", $sformatf("[%s] STIM_DLL: taking TLPs from PCIe_DLL_Seqr", tag), UVM_LOW)
+    forever begin
+      seq_item_port.get_next_item(req);
+      if (cfg.mode == RC_MODE) begin
+        wait (rc_dl_state == DL_ACTIVE);
+        rc_tx_pkt_mb.put(req);
+      end
+      else begin
+        wait (ep_dl_state == EP_DL_ACTIVE);
+        ep_tx_pkt_mb.put(req);
+      end
+      `uvm_info("DLL_DRV", $sformatf("[%s] STIM_DLL: injected [uid=%0d] %0d DW into %s TX path",
+               tag, req.pkt_uid, req.tx_data_t.size(), cfg.mode.name()), UVM_MEDIUM)
+      seq_item_port.item_done();
+    end
   endtask
   
  task rc_drive_dl_up_thread();

@@ -1,5 +1,22 @@
 typedef enum {RC_MODE, EP_MODE} pcie_mode_e;
 
+//-----------------------------------------------------------
+// Layered-stimulus selector. See docs/LAYERED_STIMULUS_PLAN.md.
+//   STIM_TL  (default) - unchanged behaviour: a test drives the
+//                        TL sequencer and traffic flows down TL->DLL
+//                        ->MAC->PMA. DLL/MAC/PMA drivers take their
+//                        input from the layer above (monitor snoop).
+//   STIM_DLL / STIM_MAC / STIM_PMA
+//                      - that layer's driver instead takes its input
+//                        from its OWN sequencer, so a test can inject
+//                        pre-formed stimulus directly at that layer.
+//                        The monitor->driver connection is untouched;
+//                        it just carries no traffic because no
+//                        higher-layer sequence runs.
+// Set per side on rc_cfg[i] / ep_cfg[i] in the test's build_phase.
+//-----------------------------------------------------------
+typedef enum { STIM_TL, STIM_DLL, STIM_MAC, STIM_PMA } stim_layer_e;
+
 class env_cfg extends uvm_object;
 
   `uvm_object_utils(env_cfg)
@@ -7,6 +24,8 @@ class env_cfg extends uvm_object;
   pcie_mode_e mode;
 
   int unsigned gen = 3;
+
+  stim_layer_e stim_layer = STIM_TL;
 
   //-----------------------------------------------------------
   // DLL/PHY-layer error injection (see err_inject_e in

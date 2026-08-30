@@ -1029,4 +1029,79 @@ register_num, ext_register_num, dw), UVM_NONE)
     return s;
   endfunction
 
+  //===========================================================
+  // LAYERED-STIMULUS BUILD HELPERS
+  //   Used by the pcie_<layer>_base_seq sequences to fill the one
+  //   field the target layer's driver consumes. See
+  //   docs/LAYERED_STIMULUS_PLAN.md.
+  //===========================================================
+
+  // 32-bit LCRC over a DW list - same algorithm as
+  // PCIe_DLL_Driver::rc_calculate_lcrc / ep_calculate_lcrc and
+  // Sequence_item::calculate_ecrc (CRC-32, reflected, final invert
+  // + per-byte bit-reverse).
+  function bit [31:0] calculate_lcrc(input bit [31:0] pkt_q[$]);
+    bit [31:0] crc;
+    bit [31:0] lcrc;
+    bit        data_bit, feedback;
+    crc = 32'hFFFF_FFFF;
+    foreach (pkt_q[i])
+      for (int b = 0; b < 32; b++) begin
+        data_bit = pkt_q[i][b];
+        feedback = crc[0] ^ data_bit;
+        crc = crc >> 1;
+        if (feedback) crc ^= 32'hEDB8_8320;
+      end
+    crc = ~crc;
+    for (int byte_num = 0; byte_num < 4; byte_num++)
+      for (int bit_num = 0; bit_num < 8; bit_num++)
+        lcrc[byte_num*8 + bit_num] = crc[byte_num*8 + (7-bit_num)];
+    return lcrc;
+  endfunction
+
+  // DLL injection: a bare TLP (header + payload + ECRC if TD) with
+  // NO sequence number and NO LCRC - the DLL driver adds those.
+  // Fills BOTH `tx_data_t` (RC-side consumer reads this) and
+  // `tx_data` (EP-side consumer reads this) so one item works either
+  // direction.
+  function void build_dll_stream();
+    pack_tlp();
+    tx_data_t.delete();
+    tx_data.delete();
+    foreach (tlp_q[i]) begin
+      tx_data_t.push_back(tlp_q[i]);
+      tx_data.push_back(tlp_q[i]);
+    end
+  endfunction
+
+  // MAC injection: a fully framed DLL packet
+  //   { {20'd0, seq_no}, header+payload+ECRC, LCRC }
+  // placed as one entry in the queue-of-queues. Fills BOTH
+  // `mac_tx_data` (RC-side, read by write_port_e) and `mac_rx_data`
+  // (EP-side, read by write_port_g) so one item works either way.
+  function void build_mac_stream(input bit [11:0] seq_no);
+    bit [31:0] framed[$];
+    pack_tlp();
+    framed.push_back({20'd0, seq_no});
+    foreach (tlp_q[i]) framed.push_back(tlp_q[i]);
+    framed.push_back(calculate_lcrc(framed));
+    mac_tx_data.delete();  mac_tx_data.push_back(framed);
+    mac_rx_data.delete();  mac_rx_data.push_back(framed);
+  endfunction
+
+  // PMA injection (v1): pack a DW stream into 130-bit data blocks
+  //   { 2'b10 sync header, DW0, DW1, DW2, DW3 }
+  // per lane (matches PCIe_MAC_driver's block build). NOTE: this does
+  // NOT scramble - the per-lane scrambler is a stateful LFSR in the
+  // MAC/PMA drivers. A v1 PMA test either injects into a path where
+  // scrambling is bypassed, or pre-scrambles in the sequence. See
+  // LAYERED_STIMULUS_PLAN.md risks.
+  function void build_pma_blocks(input bit [31:0] dw_q[$], input int lane = 0);
+    bit [31:0] q[$] = dw_q;
+    while (q.size() % 4 != 0) q.push_back(32'h0);
+    pma_tx_data[lane].delete();
+    for (int i = 0; i < q.size(); i += 4)
+      pma_tx_data[lane].push_back({2'b10, q[i], q[i+1], q[i+2], q[i+3]});
+  endfunction
+
 endclass : Sequence_item
