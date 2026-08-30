@@ -10,6 +10,7 @@ package Package;
 `include "../agents/TAG_Manager.sv"
 `include "../sequences/Sequence.sv"
 `include "../sequences/Layer_Sequences.sv"
+`include "../sequences/Block_Sequences.sv"
 `include "../agents/EP_Config_Space.sv"
 `include "../agents/RX_PCIe_LUT.sv"
 `include "../agents/PCIe_TL_Sequencer.sv"
@@ -58,4 +59,5 @@ package Package;
 `include "../tests/Test.sv"
 `include "../tests/Error_Tests.sv"
 `include "../tests/Layer_Tests.sv"
+`include "../tests/Block_TL_Tests.sv"
 endpackage
