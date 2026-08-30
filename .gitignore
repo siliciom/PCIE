@@ -1,0 +1,30 @@
+# ── QuestaSim / ModelSim build & run artifacts ────────────────────────
+pcie_gen3/sim/work/
+pcie_gen3/sim/transcript
+pcie_gen3/sim/vsim.wlf
+pcie_gen3/sim/*.wlf
+pcie_gen3/sim/modelsim.ini
+pcie_gen3/sim/.modelsim
+pcie_gen3/sim/*.vstf
+pcie_gen3/sim/vish_stacktrace.vstf
+pcie_gen3/sim/logfile.sv
+
+# ── Per-test transcripts & the regression summary (regenerated every run) ──
+# (already-committed logs must be removed once with:  git rm -r --cached pcie_gen3/sim/sim)
+pcie_gen3/sim/sim/
+pcie_gen3/sim/*_console.txt
+
+# ── Coverage (regenerated every run) ─────────────────────────────────
+# (to stop tracking the committed ones:  git rm -r --cached pcie_gen3/sim/coverage_reports)
+pcie_gen3/sim/coverage_reports/
+*.ucdb
+covhtmlreport/
+
+# ── Scratch / experiment do-files (keep run.do, regr.do, run_all.do) ──
+pcie_gen3/sim/compile_check*.do
+pcie_gen3/sim/run_gen3_*.do
+
+# ── Editor / OS ──────────────────────────────────────────────────────
+*.swp
+*~
+.DS_Store
