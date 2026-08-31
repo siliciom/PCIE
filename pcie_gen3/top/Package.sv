@@ -61,4 +61,5 @@ package Package;
 `include "../tests/Layer_Tests.sv"
 `include "../tests/Block_TL_Tests.sv"
 `include "../tests/Block_DLL_Tests.sv"
+`include "../tests/Block_LTSSM_Tests.sv"
 endpackage

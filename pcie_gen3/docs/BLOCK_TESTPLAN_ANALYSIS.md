@@ -195,3 +195,26 @@ The layered-stimulus infra + the existing VIP support these well and they fill r
 
 > Everything in steps 1–2 is buildable **right now** (compile-only; run-verify when a simulator
 > license frees up). That's ~20 real block tests without touching the VIP.
+
+---
+
+## 8. Build status (compile-verified at Gen3, run-verify pending license)
+
+| Batch | File | Commit | Tests |
+|---|---|---|---|
+| TL block A | `tests/Block_TL_Tests.sv` + `sequences/Block_Sequences.sv` | `d9d0298` | 12 (rows 2,3,4,7,8,12,15,20,21,23 + Attr, TC) |
+| DLL block A | `tests/Block_DLL_Tests.sv` | `fe9672b` | 7 (rows 43,32,36,30,38/39/40,34/37,44) |
+| LTSSM block | `tests/Block_LTSSM_Tests.sv` | _this batch_ | 5 (rows 46/47, 49/50, 54, 55, 56) |
+
+**LTSSM batch notes.** These do *not* use layered stimulus — they direct the LTSSM via the
+existing `link_ctrl_*` env-cfg knobs (same as the `LTSSM_*` Top-Testplan tests) and add the
+checkers those tests lack: a state-history sampler on `rc_state`/`ep_state` (`@()` on the MAC
+driver's LTSSM FSM var) gates PASS/FAIL on "did the LTSSM actually enter the target state and
+return". `LTSSM_Recovery_SpeedChange_Test` additionally asserts `rc_active_gen == ep_active_gen
+== 3` after the Gen1→Gen3 speed change. The Training-Control-bit scan of RC TX ordered sets
+(`os_t_lane[0]` bits 80/81/82) is reported as **info only** — Gen3 TS scrambling may re-map
+those bit positions; promote to a hard check after run-verify confirms the layout.
+
+**Still not built:** remaining TL rows (IO Wr/Rd, multi-tag, VC-arb, CplD split), DLL additions
+(Duplicate-TLP, SeqGap-Nak), MAC/PMA transaction-injection tests (blocked on `STIM_MAC` /
+`STIM_PMA` run-verify), and the Data-Framing sub-block (needs a framing-model project).
