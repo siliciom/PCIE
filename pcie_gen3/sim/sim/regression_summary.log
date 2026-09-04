@@ -1,27 +1,36 @@
 PCIe UVM REGRESSION
 Regression : regr_cov1
-Total      : 30
-PASS       : 24
-FAIL       : 6
-Duration   : 11401 sec
+Base Seed  : 1788445759
+Total      : 33
+PASS       : 33
+FAIL       : 0
+Duration   : 10279 sec
 
 PASSED TESTS
+PASS : B2B_Mem_Wr_Rd_4DW_test
 PASS : Single_Mem_Wr_Rd_3DW_test
 PASS : Single_Mem_Wr_Rd_4DW_test
 PASS : Multiple_Mem_Wr_Rd_3DW_test
 PASS : Multiple_Mem_Wr_Rd_4DW_test
+PASS : B2B_Mem_Wr_Rd_3DW_test
+PASS : Single_IO_Wr_Rd_3DW_test
+PASS : Multiple_IO_Wr_Rd_3DW_test
+PASS : B2B_IO_Wr_Rd_3DW_test
+PASS : Single_Mem_Wr_Rd_3DW_Max_payload_test
 PASS : Single_Mem_Wr_Rd_4DW_Max_payload_test
 PASS : Multiple_Mem_Wr_Rd_3DW_rand_length_test
-PASS : B2B_Mem_Wr_Rd_4DW_test
-PASS : Single_IO_Wr_Rd_3DW_test
-PASS : B2B_IO_Wr_Rd_3DW_test
+PASS : Multiple_Mem_Wr_Rd_4DW_rand_length_test
 PASS : LTSSM_Disabled_test
 PASS : LTSSM_Loopback_test
 PASS : LTSSM_HotReset_test
+PASS : Single_Mem_Wr_emt_Rd_3DW_test
+PASS : Multiple_Mem_Wr_Rd_3DW_tag_outstanding_test
+PASS : Multiple_Mem_Wr_Rd_3DW_tc_vc_test
 PASS : TL_ECRC_Error_test
 PASS : TL_Length_Mismatch_test
 PASS : TL_IO_Length_test
 PASS : TL_CFG_Length_test
+PASS : TL_Fmt_Rtype_Illegal_test
 PASS : TL_Bad_BE_test
 PASS : TL_EP_Poison_test
 PASS : TL_Unsupported_Request_test
@@ -30,11 +39,41 @@ PASS : DLL_LCRC_Error_test
 PASS : DLL_DLLP_CRC_Error_test
 PASS : DLL_Seq_Num_test
 PASS : DLL_Replay_Num_Rollover_test
+PASS : pcie_ral_test
 
 FAILED TESTS
-FAIL : Single_Mem_Wr_Rd_3DW_Max_payload_test
-FAIL : B2B_Mem_Wr_Rd_3DW_test
-FAIL : Multiple_IO_Wr_Rd_3DW_test
-FAIL : TL_Fmt_Rtype_Illegal_test
-FAIL : PHY_STP_Framing_Error_test
-FAIL : DLL_Replay_Timer_test
+
+TEST SEEDS (test:seed)
+B2B_Mem_Wr_Rd_4DW_test:352886150
+Single_Mem_Wr_Rd_3DW_test:957535746
+Single_Mem_Wr_Rd_4DW_test:303283390
+Multiple_Mem_Wr_Rd_3DW_test:283940177
+Multiple_Mem_Wr_Rd_4DW_test:182563966
+B2B_Mem_Wr_Rd_3DW_test:352580346
+Single_IO_Wr_Rd_3DW_test:817880789
+Multiple_IO_Wr_Rd_3DW_test:122431891
+B2B_IO_Wr_Rd_3DW_test:712801477
+Single_Mem_Wr_Rd_3DW_Max_payload_test:54428517
+Single_Mem_Wr_Rd_4DW_Max_payload_test:780099400
+Multiple_Mem_Wr_Rd_3DW_rand_length_test:130627269
+Multiple_Mem_Wr_Rd_4DW_rand_length_test:452517676
+LTSSM_Disabled_test:464586883
+LTSSM_Loopback_test:311751556
+LTSSM_HotReset_test:608406099
+Single_Mem_Wr_emt_Rd_3DW_test:481318903
+Multiple_Mem_Wr_Rd_3DW_tag_outstanding_test:526816929
+Multiple_Mem_Wr_Rd_3DW_tc_vc_test:212141431
+TL_ECRC_Error_test:461047067
+TL_Length_Mismatch_test:818056009
+TL_IO_Length_test:67353769
+TL_CFG_Length_test:14799564
+TL_Fmt_Rtype_Illegal_test:736274709
+TL_Bad_BE_test:569039820
+TL_EP_Poison_test:852255195
+TL_Unsupported_Request_test:853067582
+TL_Completer_Abort_test:506865302
+DLL_LCRC_Error_test:885144201
+DLL_DLLP_CRC_Error_test:618587111
+DLL_Seq_Num_test:593589310
+DLL_Replay_Num_Rollover_test:455538969
+pcie_ral_test:243455906

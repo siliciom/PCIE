@@ -1,124 +1,137 @@
-# Environment Architecture
+# PCIe Gen3 Testbench Architecture
 
-## 1. Big picture
+## 1. Overview
 
-There is **no RTL DUT**. `PCIe_top` (`top/TOP.sv`) builds two complete UVM environments —
-one **Root Complex (RC)** and one **Endpoint (EP)** — and connects them PHY-to-PHY:
+The testbench models one PCIe link between a **Root Complex (RC)** and an
+**Endpoint (EP)**, driven and checked end-to-end through the layered PCIe
+stack:
 
 ```
-      RC_Env_0  (env_cfg.mode = RC_MODE)          EP_Env_0  (env_cfg.mode = EP_MODE)
-   ┌───────────────────────────────┐           ┌───────────────────────────────┐
-   │  TL  agent  (driver+monitor)  │           │  TL  agent  (monitor + LUT)   │
-   │  DLL agent  (driver+monitor)  │           │  DLL agent  (driver+monitor)  │
-   │  MAC agent  (driver = LTSSM)  │           │  MAC agent  (driver = LTSSM)  │
-   │  PMA agent  (serialiser)      │           │  PMA agent  (serialiser)      │
-   └──────────────┬────────────────┘           └───────────────┬───────────────┘
-                  │ RC_PHY_TX.TX[l]  ───────────────────────▶  EP_PHY_RX.RX[l]
-                  │ RC_PHY_TX.RX[l]  ◀───────────────────────  EP_PHY_RX.TX[l]
-                  └───────────── serial per-lane loopback (TOP.sv generate block) ────┘
-
-   Scoreboards (test-level, one set, fed by both envs' monitors):
-       Scoreboard_Top   TL_Scoreboard   DL_Scoreboard   MAC_SB (PCIe_MAC_Scoreboard)
+ Transaction Layer (TL)  <-- TLPs -->  Transaction Layer (TL)
+          |                                     |
+ Data Link Layer (DLL)   <-- DLLPs -->  Data Link Layer (DLL)
+          |                                     |
+     MAC / LTSSM         <-- Ordered Sets -->     MAC / LTSSM
+          |                                     |
+   Physical (PMA/PIPE)   <-- serial bits -->   Physical (PMA/PIPE)
+     RC side                                   EP side
 ```
 
-The sequencer in each test drives `RC_Env[0].PCIe_TL_Agnt.TX_TL_Seqr`. The RC turns that into a
-TLP, pushes it down its own layer stack, across the loopback wires, and up the EP stack; the EP's
-`RX_PCIe_LUT` decodes it and generates the completion, which travels back the same way.
+The number of RC/EP instances and lanes are compile-time parameters
+(`NUM_RC`, `NUM_EP`, `NUM_LANES` in `top/pcie_top_defines.svh`, set via
+`+define+` on `vlog`). A single RC/EP pair with one lane is the default and
+the only configuration currently driven by the base test.
 
-## 2. The layer stack (per env)
+## 2. Top Level (`top/`)
 
-Each `Env_Top` builds one stack. Every agent has a `RC_MODE` and an `EP_MODE` code path selected
-by `env_cfg.mode`.
+* **`PCIe_TOP.sv` / `TOP.sv`** - instantiate the RC and EP environments, the
+  interfaces connecting them, and start `run_test()`.
+* **Interfaces**:
+  * `TX_TL_DL_Interface` / `RX_TL_DL_Interface` - TL <-> DLL handoff
+  * `TX_DL_PCS_Interface` / `RX_DL_PCS_Interface` - DLL <-> MAC handoff
+  * `TX_Pipe_interface` / `RX_Pipe_interface` - MAC <-> PMA (PIPE-style)
+  * `Phy_Interface.sv` - per-lane serial bit stream between RC and EP PMA
+  * `apb_interface.sv` - APB bus used for register-space (CFG) access
+* **`Package.sv`** - top-level SystemVerilog package aggregating includes.
+* **`PCIe_Enum_Type_Pkg.sv`** - shared enum/type package (TLP types, formats,
+  LTSSM states, etc., alongside `pcie_top_defines.svh`).
+* **`pcie_top_defines.svh` / `pcie_top_defines.sv`** - compile-time macros
+  (`NUM_RC`, `NUM_EP`, `NUM_LANES`, `NUM_VC`) and shared enums, including
+  `tlp_type_e` and `err_inject_e` (error-injection scenarios, see
+  `KNOWN_ISSUES.md`).
 
-| Layer | Agent | Driver does | Monitor does | Interface |
-|---|---|---|---|---|
-| **TL** | `PCIe_TL_*` | RC: pack a `Sequence_item` into `tlp_q` (header DW0..3, payload, ECRC), gate on FC credit (`VC_Arbiter` + `FC_Manager`), drive DW-by-DW on `TX_TL_DL`. EP: drive completion DWs on `RX_TL_DL`. | Capture the TLP DW stream, decode the header, run **malformed-TLP checks** (length, IO/CFG length, fmt+type, byte enables, poison), ECRC check on RX, publish to scoreboards / to `RX_PCIe_LUT`. | `TX_TL_DL_Interface`, `RX_TL_DL_Interface` |
-| **DLL** | `PCIe_DLL_*` | Frame the TLP: prepend a 12-bit **sequence number**, append **LCRC**, store in a **2048-entry replay buffer**. Handle **Ack/Nak** (delete acked entries, replay on Nak / on **replay-timer** expiry), send **InitFC1/2 / UpdateFC** DLLPs. `DL_INACTIVE → DL_INIT_FC1 → DL_INIT_FC2 → DL_ACTIVE`. | Collect the framed DLP off the PCS interface, check **LCRC** and **sequence number** (gap → Nak, stale → Ack+drop), check **DLLP CRC-16**, publish. | `TX_DLL_PCS_Interface`, `RX_DLL_PCS_Interface` |
-| **MAC / LTSSM** | `PCIe_MAC_*` | The **LTSSM**: `Detect → Polling → Configuration → L0`, `Recovery.RcvrLock/RcvrCfg/Speed/Idle`, `Loopback.Entry/Active/Exit`, `Hot Reset`, `Disabled`. Exchanges **TS1/TS2** ordered sets (with Rate ID, Link#, Lane#), negotiates link width and generation, adds the **STP** framing token per TLP, **byte-stripes** across lanes. | Un-frame (find one STP per TLP), un-stripe, forward to DLL. Also flags out-of-order DL sequence / framing anomalies. | `pipe_tx_interface`, `pipe_rx_interface` |
-| **PMA** | `PCIe_PMA_*` | Per lane: **scramble** (23-bit Gen3 LFSR), pack into **130-bit** blocks (`2'b10`/`2'b01` sync header), **serialise** bit-by-bit onto `phy_*_interface.TX[lane]`. | Deserialise the serial stream, descramble, reassemble 32-bit DWs, forward to MAC. | `phy_tx_interface`, `phy_rx_interface` |
+## 3. Agents (`agents/`)
 
-Supporting blocks:
+Each protocol layer has its own UVM agent (`*_Agent`/`*_agent`,
+`*_Driver`, `*_Monitor`, `*_Sequencer`):
 
-* **`RX_PCIe_LUT`** (EP side, in the TL agent) — decodes the request address against the EP's BARs,
-  generates the completion(s): normal `CplD` (split at `MAX_CPL_BYTES = 128`), `UR` for an
-  unclaimed address, `CA` for a reserved trigger offset. Also routes CfgRd/CfgWr to
-  `EP_Config_Space`.
-* **`EP_Config_Space`** — the EP's Type-0 configuration header + BAR sizing model.
-* **`TAG_Manager`** — allocates / frees the 8-bit tags for outstanding non-posted requests.
-* **`FC_Manager`** — per-VC credit pools (PH/PD/NPH/NPD/CPLH/CPLD); `consume_credit` on TX,
-  `return_credit` after the LUT processes a request; drives the credit values onto the TL↔DL
-  interface for the DLL to advertise.
-* **`VC_Arbiter`** — 8 per-VC queues, **strict-priority** (VC7 > … > VC0); a VC is skipped only if
-  empty or its head-of-line packet lacks FC credit.
-
-## 3. Clocks (`TOP.sv`)
-
-`timescale 1ns/100ps`.
-
-| Clock | Toggle | Freq | Used for |
-|---|---|---|---|
-| `CLK` | `#2` | 250 MHz | the TL/DL/internal logic clock (`CLK` on every `*_Interface`) |
-| `CLK_GEN1` | `#2` | 250 MHz | PIPE clock when running Gen1 |
-| `CLK_GEN2` | `#1` | 500 MHz | PIPE clock when running Gen2 |
-| `CLK_GEN3` | `#0.5` | 1 GHz | PIPE clock when running Gen3 |
-
-`RC_PCLK[i]` / `EP_PCLK[i]` are muxed between GEN1/2/3 by the `Rate` pin, which the MAC driver
-drives from `Recovery.Speed`.
-
-## 4. Configuration knobs
-
-Compile-time (`+define+` on `vlog`), defaults in `top/pcie_top_defines.svh`:
-
-| Macro | Default | Meaning |
+| Agent | Layer | Responsibility |
 |---|---|---|
-| `NUM_RC` / `NUM_EP` | 1 | number of RC / EP env instances |
-| `NUM_RC_GEN` / `NUM_EP_GEN` | 1 | advertised PCIe generation (1/2/3) — copied to `env_cfg.gen` in `pcie_base_test::build_phase` |
-| `NUM_LANES` | 1 | lanes per link |
-| `NUM_VC` | 8 | virtual channels modelled |
+| `PCIe_TL_Agent` | Transaction | Drives/monitors TLPs (requests & completions) |
+| `PCIe_DLL_Agent` | Data Link | Drives/monitors DLLPs, Ack/Nak, sequence numbers, replay buffer |
+| `PCIe_MAC_Agent` | MAC / LTSSM | Drives/monitors the LTSSM state machine and Ordered Sets |
+| `PCIe_PMA_Agent` | Physical | Serializes/deserializes the per-lane bit stream (`Phy_Interface`) |
+| `apb_master_agent` / `apb_slv_agent` | Register access | Drives the APB bus used to reach `EP_Config_Space` |
 
-Run-time (`+plusarg` on `vsim`):
+Supporting (non-agent) components in `agents/`:
 
-| Plusarg | Effect |
-|---|---|
-| `+UVM_TESTNAME=<name>` | which test to run |
-| `+UVM_VERBOSITY=<level>` | UVM_NONE / UVM_LOW / UVM_MEDIUM / UVM_HIGH |
-| `+PCIE_DEBUG` | raise the whole env to UVM_HIGH (see DEBUG_GUIDE.md) |
+* **`EP_Config_Space.sv`** - models the Endpoint's PCI configuration space
+  (BARs, command/status, etc.) reachable over APB.
+* **`FC_Manager.sv`** (also referenced from `env/`) / **`TAG_Manager.sv`** -
+  flow-control credit bookkeeping and outstanding-tag allocation used by the
+  TL driver/sequences.
+* **`VC_Arbiter.sv`** - Virtual Channel arbitration between TC-mapped traffic.
+* **`RX_PCIe_LUT.sv`** - lookup table used on the receive path (e.g. for
+  scrambling/byte-striping bookkeeping).
 
-`env_cfg` (`env/env_config.sv`) also carries all the LTSSM timeout values used by the LTSSM tests.
+Each driver implements the **LTSSM** for its side (RC/EP): Detect -> Polling
+-> Configuration -> L0, plus Recovery, Loopback, Hot Reset and Disabled
+sub-states, all gated by timers pulled from `env_cfg` (see below).
 
-## 5. Data flow of one memory write+read (functional test)
+## 4. Environment (`env/`)
+
+`Env_Top.sv` instantiates and connects, per RC/EP side:
+
+* `PCIe_TL_Agnt`, `PCIe_DLL_Agnt`, MAC/PMA agents, `Apb_Slave_Agnt`
+* **Scoreboards**: `TL_Scoreboard.sv` (TL request/completion checking),
+  `DL_Scoreboard.sv` (DLLP/sequence-number checking), `MAC_SB.sv`,
+  aggregated under `Scoreboard_Top.sv`
+* **Coverage**: `pcie_cov.sv` (TL-layer functional coverage), `DL_cov.sv`
+  (DLL-layer coverage)
+* **`Error_Report_Catcher.sv`** - intercepts expected `UVM_ERROR`/`UVM_FATAL`
+  reports for negative/error-injection tests so they don't fail the test,
+  re-tags them as `EXPECTED_<id>`, and counts them (see `KNOWN_ISSUES.md` for
+  the demotion mechanism)
+* **`reg_block.sv` / `reg_block1.sv`** - UVM RAL register model(s) for the
+  Endpoint's configuration/register space
+* **`adapter.sv`** - RAL-to-APB bus adapter (`apb_reg_adapter`) used by
+  `pcie_ral_test`
+* **`env_config.sv`** - the `env_cfg` object: RC/EP mode select, `gen`
+  (speed), `num_lanes`/`active_lane_mask`, TC->VC mapping table,
+  `inject_err` (error-injection selector), and every LTSSM sub-state timeout
+  (`detect_quiet_timeout`, `polling_active_timeout`, `recovery_*_timeout`,
+  etc.), each commented with the PCIe Base Spec bound it approximates.
+
+TLM connections wire monitor analysis ports into the scoreboards and
+coverage collectors, e.g.:
 
 ```
-test.run_phase
-  └─ super.run_phase  ── pcie_base_test: wait DL_active (both sides), do_enumeration()
-                          (CfgRd VID/DID, header type, read+size+assign BARs, enable Command reg)
-  └─ Mem_Seq.start(RC TX_TL_Seqr)
-        MEM_WR:  seq_item ─▶ TL drv: pack_tlp (stamp uid) ─▶ VC_Arbiter ─▶ FC gate
-                 ─▶ DLL drv: +seq +LCRC, replay-buffer  ─▶ MAC drv: +STP, stripe
-                 ─▶ PMA drv: scramble, 130b, serialise  ─▶ [loopback wire]
-                 ─▶ EP PMA mon ─▶ EP MAC mon (un-STP, un-stripe)
-                 ─▶ EP DLL mon (LCRC / seq check)       ─▶ EP TL mon (decode, malformed checks, ECRC)
-                 ─▶ RX_PCIe_LUT: apply payload to mem_space[]
-        MEM_RD:  same path down to RX_PCIe_LUT
-                 ─▶ generate_mem_cpl: build CplD fragments from mem_space[]
-                 ─▶ EP TL drv ─▶ EP DLL/MAC/PMA ─▶ [wire] ─▶ RC PMA/MAC/DLL mon
-                 ─▶ RC TL mon (collect completion)
-        Scoreboard_Top:
-          - compare_tlp:  RC-TX TLP DW list  vs  EP-RX TLP DW list   (transport intact?)
-          - mem model:    reassemble the CplD payload, compare vs what MEM_WR stored (data correct?)
-        DL_Scoreboard:    RC-sent DLP  vs  EP-received DLP            (DLL transport intact?)
-        MAC_SB:           RC-TX PHY words  vs  EP-RX PHY words        (PHY transport intact?)
+PCIe_TL_Agnt.TX_TL_Mon.TX_TL_Send.connect(TL_Scb.TX_TL_Recv);
+PCIe_DLL_Agnt.PCIe_DLL_Mon.rc_tx.connect(DL_Scb.rc_tx_imp);
 ```
 
-## 6. Scoreboards
+## 5. Sequences (`sequences/`)
 
-| Scoreboard | Compares | Pass counter | Fails on |
-|---|---|---|---|
-| `Scoreboard_Top` | (a) RC-TX TLP `tlp_q` vs EP-RX TLP `tlp_q`; (b) read-completion payload vs `mem_space[]` model | `pass_cnt` (transport), `mem_pass_cnt` (data) | size mismatch, any DW mismatch, read data mismatch, unmatched CplD, poisoned write |
-| `DL_Scoreboard` | RC↔EP DLP and DLLP DW lists | `DL_pass_cnt`, `DLLP_pass_cnt` | any DW mismatch (**no size gate** — see KNOWN_ISSUES #5) |
-| `MAC_SB` | RC-TX vs EP-RX 130-bit PHY words | `PL_pass_cnt` | size or any word mismatch |
-| `TL_Scoreboard` | pairs a TL request with its completion, forwards the pair to `Scoreboard_Top` | — | — |
+* **`Sequence_item.sv`** - the TL transaction item (TLP fields: fmt, type,
+  address, length, tag, TC, payload, etc.)
+* **`Sequence.sv`** - TL-layer sequences building the TLP traffic patterns
+  used by the functional tests (single/multiple/B2B reads & writes, max
+  payload, randomized length, tag/TC-VC variants)
+* **`apb_master_seq_item.sv` / `apb_slv_seq.sv` / `apb_slv_xtn.sv`** - APB
+  sequence items/sequences for register-space access
+* **`uvm_reg_sequence.sv` / `uvm_reg_sequence1.sv`** - RAL sequences used by
+  `pcie_ral_test`
 
-All scoreboards print an end-of-run `SUMMARY` block (counts, undrained queues, outstanding reads,
-credits remaining) at `UVM_NONE` so it is always in the transcript. **None of them currently fail
-the test if they simply received no traffic** — see `KNOWN_ISSUES.md`.
+## 6. Tests (`tests/`)
+
+`pcie_base_test` (in `tests/Test.sv`) builds `Env_Top` for both RC and EP,
+applies `env_cfg`, and brings the link to `L0` before handing off to
+`run_phase`. All functional and LTSSM tests extend it. `Error_Tests.sv`
+contains error-injection tests, which extend `pcie_base_test` and set
+`cfg.inject_err` to a specific `err_inject_e` scenario. See `docs/TESTS.md`
+for the complete list and `docs/DEBUG_GUIDE.md` for how to run one.
+
+## 7. Regression & Simulation (`Regression/`, `sim/`)
+
+* **`run.do`** (in `pcie_gen3/`) - compiles and runs a single, fixed test
+  (edit `+UVM_TESTNAME=` to change it).
+* **`sim/regr.do`** - runs the full test list (defined inline as a Tcl
+  `tests` list), merges coverage into `coverage_reports/merged_cov.ucdb`, and
+  writes `sim/regression_summary.log` with a PASS/FAIL count and per-test
+  seeds for reproduction.
+* **`sim/run.do`** - single-test run with code coverage enabled, writing to
+  `coverage_reports_single/`.
+* **`sim/coverage_reports/`** - per-test `.ucdb` coverage databases plus
+  merged coverage and text logs.
+* **`sim/sim/<test_name>/<test_name>.log`** - full simulation transcript per
+  test, including all `uvm_info`/`uvm_error` output.

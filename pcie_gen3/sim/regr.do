@@ -5,22 +5,35 @@
 if {![info exists regression_name]} { set regression_name "regr_cov1" }
 if {![info exists enable_cov]} { set enable_cov 1 }
 
+# Random seed control
+#Multiple_Mem_Wr_Rd_3DW_rand_length_test
+#PHY_STP_Framing_Error_test
+#DLL_Replay_Timer_test
+# Override on command line, e.g.: vsim -c -do "set seed 12345; do run.do"
+# If not set, a seed is derived from the current time so each run is different.
+if {![info exists seed]} { set seed [clock seconds] }
+expr {srand($seed)}
+
 set tests {
+    B2B_Mem_Wr_Rd_4DW_test
     Single_Mem_Wr_Rd_3DW_test
     Single_Mem_Wr_Rd_4DW_test
     Multiple_Mem_Wr_Rd_3DW_test
-    Multiple_Mem_Wr_Rd_4DW_test
-    Single_Mem_Wr_Rd_3DW_Max_payload_test
-    Single_Mem_Wr_Rd_4DW_Max_payload_test
-    Multiple_Mem_Wr_Rd_3DW_rand_length_test
+    Multiple_Mem_Wr_Rd_4DW_test 
     B2B_Mem_Wr_Rd_3DW_test
-    B2B_Mem_Wr_Rd_4DW_test
     Single_IO_Wr_Rd_3DW_test
     Multiple_IO_Wr_Rd_3DW_test
     B2B_IO_Wr_Rd_3DW_test
+    Single_Mem_Wr_Rd_3DW_Max_payload_test
+    Single_Mem_Wr_Rd_4DW_Max_payload_test 
+    Multiple_Mem_Wr_Rd_3DW_rand_length_test
+    Multiple_Mem_Wr_Rd_4DW_rand_length_test
     LTSSM_Disabled_test
     LTSSM_Loopback_test
     LTSSM_HotReset_test
+    Single_Mem_Wr_emt_Rd_3DW_test
+    Multiple_Mem_Wr_Rd_3DW_tag_outstanding_test
+    Multiple_Mem_Wr_Rd_3DW_tc_vc_test
     TL_ECRC_Error_test
     TL_Length_Mismatch_test
     TL_IO_Length_test
@@ -33,9 +46,9 @@ set tests {
     DLL_LCRC_Error_test
     DLL_DLLP_CRC_Error_test
     DLL_Seq_Num_test
-    PHY_STP_Framing_Error_test
     DLL_Replay_Num_Rollover_test
-    DLL_Replay_Timer_test
+    pcie_ral_test
+    
 }
 
 if {[info exists single_test]} { set tests [list $single_test] }
@@ -52,6 +65,7 @@ if {[file exists $MergedUCDB]} { file delete -force $MergedUCDB }
 set StartTime [clock seconds]
 set PassedTests {}
 set FailedTests {}
+set TestSeeds {}
 set total_tests [llength $tests]
 
 puts ""
@@ -60,6 +74,7 @@ puts "                 PCIe UVM REGRESSION"
 puts "============================================================"
 puts "Regression Name : $regression_name"
 puts "Coverage        : $enable_cov"
+puts "Base Seed       : $seed"
 puts "Total Tests     : $total_tests"
 puts "============================================================"
 puts ""
@@ -109,15 +124,21 @@ foreach test $tests {
     file mkdir $TestDir
     if {[file exists $UCDBFile]} { file delete -force $UCDBFile }
 
+    # Derive a distinct seed for this test from the base seed (deterministic
+    # given the same base seed, but different per test).
+    set test_seed [expr {int(rand()*1000000000)}]
+    lappend TestSeeds "$test:$test_seed"
+
     # Register coverage save BEFORE run-all because the UVM test calls $finish.
     if {$enable_cov} {
         set child_do "coverage save -onexit $UCDBFile; run -all"
-        set cmd [list vsim.exe -c -coverage -cvgperinstance -debugDB +acc work.PCIe_top +UVM_TESTNAME=$test +UVM_VERBOSITY=UVM_LOW -l $LogFile -do $child_do]
+        set cmd [list vsim.exe -c -coverage -cvgperinstance -debugDB +acc work.PCIe_top +UVM_TESTNAME=$test -sv_seed $test_seed +UVM_VERBOSITY=UVM_LOW -l $LogFile -do $child_do]
     } else {
         set child_do "run -all"
-        set cmd [list vsim.exe -c -debugDB +acc work.PCIe_top +UVM_TESTNAME=$test +UVM_VERBOSITY=UVM_LOW -l $LogFile -do $child_do]
+        set cmd [list vsim.exe -c -debugDB +acc work.PCIe_top +UVM_TESTNAME=$test -sv_seed $test_seed +UVM_VERBOSITY=UVM_LOW -l $LogFile -do $child_do]
     }
 
+    puts "Seed           : $test_seed"
     puts "Starting child VSIM..."
     if {[catch { exec {*}$cmd } child_error]} {
         puts "Child VSIM returned:"
@@ -184,6 +205,7 @@ puts "============================================================"
 puts "                 REGRESSION SUMMARY"
 puts "============================================================"
 puts "Regression : $regression_name"
+puts "Base Seed  : $seed"
 puts "Total      : $total_tests"
 puts "PASS       : [llength $PassedTests]"
 puts "FAIL       : [llength $FailedTests]"
@@ -194,6 +216,7 @@ puts "Summary log: $SummaryLog"
 set fh [open $SummaryLog w]
 puts $fh "PCIe UVM REGRESSION"
 puts $fh "Regression : $regression_name"
+puts $fh "Base Seed  : $seed"
 puts $fh "Total      : $total_tests"
 puts $fh "PASS       : [llength $PassedTests]"
 puts $fh "FAIL       : [llength $FailedTests]"
@@ -204,6 +227,9 @@ foreach test $PassedTests { puts $fh "PASS : $test" }
 puts $fh ""
 puts $fh "FAILED TESTS"
 foreach test $FailedTests { puts $fh "FAIL : $test" }
+puts $fh ""
+puts $fh "TEST SEEDS (test:seed)"
+foreach ts $TestSeeds { puts $fh $ts }
 close $fh
 
 puts ""
@@ -214,4 +240,5 @@ if {[llength $FailedTests] == 0} {
 }
 puts ""
 quit -f
+
 

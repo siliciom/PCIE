@@ -8,7 +8,6 @@ class env_cfg extends uvm_object;
 
   int unsigned gen = 3;
 
-  //-----------------------------------------------------------
   // DLL/PHY-layer error injection (see err_inject_e in
   // pcie_top_defines.svh). Set directly on a specific driver's
   // cfg handle - e.g. RC_Env[0].PCIe_DLL_Agnt.PCIe_DLL_Drv.cfg -
@@ -19,30 +18,24 @@ class env_cfg extends uvm_object;
   // path runs. Durational scenarios (ERR_REPLAY_ROLLOVER,
   // ERR_REPLAY_TIMER) are held by the test for as long as it wants
   // the effect, then reset to ERR_NONE explicitly.
-  //-----------------------------------------------------------
   err_inject_e inject_err = ERR_NONE;
 
 
-  //-----------------------------------------------------------
   // TC -> VC mapping table (models the VC Resource Control
   // register's TC/VC map bits). Index = tc (0-7), value = the
   // VC that TC is routed into. Default: identity mapping
   // (tc == vc), i.e. every TC gets its own VC.
-  //
   // Example alternate mappings a test might install:
   //   all-to-VC0          : '{VC0,VC0,VC0,VC0,VC0,VC0,VC0,VC0}
   //   isochronous vs best  : TC0-3 -> VC0, TC4-7 -> VC1
   //   effort split
-  //-----------------------------------------------------------
    int unsigned num_lanes        = `PCIE_NUM_LANES;
   bit [`PCIE_NUM_LANES-1:0] active_lane_mask = {`PCIE_NUM_LANES{1'b1}};
    bit replay_en;
-  //-----------------------------------------------------------
   // LTSSM timing parameters (PCIe Base Spec 3.0 Table in each
   // sub-state's description). Defaults below are the spec values;
   // override in a test/sequence via uvm_config_db if you need
   // faster sim turnaround.
-  //-----------------------------------------------------------
   time detect_quiet_timeout   = 2ms;    // Detect.Quiet time-out (spec: 12ms max, entry condition)
   time detect_active_timeout  = 12ms;    // Receiver Detection watchdog per attempt
   time detect_retry_timeout   = 12ms;    // Wait before re-running detection on partial-lane mismatch
@@ -54,7 +47,6 @@ class env_cfg extends uvm_object;
   time config_lanenum_accept_timeout = 1ms;    // spec: 2ms (unconfirmed bound - see note above)
   time config_complete_timeout       = 1ms;    // spec: 2ms
   time config_idle_timeout           = 1ms;    // spec: min 2ms
-  //-----------------------------------------------------------
 
   time recovery_rcvrlock_timeout     = 5ms;    // spec: 24ms
   time recovery_speed_timeout        = 8ms;    // spec: 48ms
@@ -76,7 +68,7 @@ class env_cfg extends uvm_object;
   bit          link_ctrl_hot_reset       = 1'b0;
   bit          hot_reset_remain_directed = 1'b0;
   int unsigned hot_reset_ts1_count       = 16;
-  time         hot_reset_timeout         = 2ms;  
+  time         hot_reset_timeout         = 2ms;
   rand vc_id_e tc2vc_table[8];
 
   function new(string name="env_cfg");
